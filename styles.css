@@ -1,10 +1,10 @@
 /* Base Styles */
 :root {
-    --primary-color: #8D38C9;
+    --primary-color: #9900FF;
     --secondary-color: #2AC4EA;
     --dark-color: #333333;
     --light-color: #ffffff;
-    --bg-color: #9900FF;
+    --bg-color: #f8f9fa;
     --text-color: #000000;
     --border-radius: 15px;
     --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
@@ -548,7 +548,7 @@ nav ul li a:hover:after {
 
 /* Footer */
 footer {
-    background-color: #000000;
+    background-color: var(--dark-color);
     color: #CCCCCC;
     padding: 70px 0 40px;
 }
