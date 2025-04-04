@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="580" height="567" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2AC4EA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0048e7;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0.2" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background shapes -->
+  <circle cx="290" cy="280" r="250" fill="url(#grad1)" opacity="0.2" />
+  <circle cx="290" cy="280" r="200" fill="url(#grad1)" opacity="0.3" />
+  <circle cx="290" cy="280" r="150" fill="url(#grad1)" opacity="0.4" />
+  
+  <!-- Data visualization elements -->
+  <g transform="translate(150, 150)">
+    <!-- Data nodes -->
+    <circle cx="0" cy="0" r="30" fill="#0048e7" />
+    <circle cx="100" cy="-50" r="20" fill="#2AC4EA" />
+    <circle cx="150" cy="50" r="25" fill="#0048e7" />
+    <circle cx="50" cy="100" r="15" fill="#2AC4EA" />
+    <circle cx="-80" cy="70" r="22" fill="#0048e7" />
+    <circle cx="-100" cy="-60" r="18" fill="#2AC4EA" />
+    
+    <!-- Connection lines -->
+    <line x1="0" y1="0" x2="100" y2="-50" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <line x1="0" y1="0" x2="150" y2="50" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <line x1="0" y1="0" x2="50" y2="100" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <line x1="0" y1="0" x2="-80" y2="70" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <line x1="0" y1="0" x2="-100" y2="-60" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <line x1="100" y1="-50" x2="150" y2="50" stroke="#ffffff" stroke-width="2" opacity="0.5" />
+    <line x1="-80" y1="70" x2="50" y2="100" stroke="#ffffff" stroke-width="2" opacity="0.5" />
+    <line x1="-100" y1="-60" x2="100" y2="-50" stroke="#ffffff" stroke-width="2" opacity="0.5" />
+  </g>
+  
+  <!-- AI/ML elements -->
+  <g transform="translate(290, 280)">
+    <!-- Brain outline -->
+    <path d="M-60,-80 C-40,-100 40,-100 60,-80 C80,-60 80,0 60,40 C40,80 -40,80 -60,40 C-80,0 -80,-60 -60,-80 Z" 
+          fill="none" stroke="#ffffff" stroke-width="4" opacity="0.8" />
+    
+    <!-- Neural network connections -->
+    <circle cx="-30" cy="-40" r="8" fill="#ffffff" />
+    <circle cx="30" cy="-40" r="8" fill="#ffffff" />
+    <circle cx="-40" cy="0" r="8" fill="#ffffff" />
+    <circle cx="0" cy="0" r="8" fill="#ffffff" />
+    <circle cx="40" cy="0" r="8" fill="#ffffff" />
+    <circle cx="-30" cy="40" r="8" fill="#ffffff" />
+    <circle cx="30" cy="40" r="8" fill="#ffffff" />
+    
+    <!-- Neural connections -->
+    <line x1="-30" y1="-40" x2="-40" y2="0" stroke="#ffffff" stroke-width="2" />
+    <line x1="-30" y1="-40" x2="0" y2="0" stroke="#ffffff" stroke-width="2" />
+    <line x1="30" y1="-40" x2="0" y2="0" stroke="#ffffff" stroke-width="2" />
+    <line x1="30" y1="-40" x2="40" y2="0" stroke="#ffffff" stroke-width="2" />
+    <line x1="-40" y1="0" x2="-30" y2="40" stroke="#ffffff" stroke-width="2" />
+    <line x1="0" y1="0" x2="-30" y2="40" stroke="#ffffff" stroke-width="2" />
+    <line x1="0" y1="0" x2="30" y2="40" stroke="#ffffff" stroke-width="2" />
+    <line x1="40" y1="0" x2="30" y2="40" stroke="#ffffff" stroke-width="2" />
+  </g>
+  
+  <!-- Data flow elements -->
+  <g transform="translate(290, 280)" opacity="0.8">
+    <path d="M-150,-50 L-120,-30 L-150,-10 Z" fill="#ffffff">
+      <animateTransform attributeName="transform" type="translate" 
+                        values="0,0; 100,0; 0,0" dur="3s" repeatCount="indefinite" />
+    </path>
+    <path d="M150,50 L120,30 L150,10 Z" fill="#ffffff">
+      <animateTransform attributeName="transform" type="translate" 
+                        values="0,0; -100,0; 0,0" dur="3s" repeatCount="indefinite" />
+    </path>
+    <path d="M-50,-150 L-30,-120 L-10,-150 Z" fill="#ffffff">
+      <animateTransform attributeName="transform" type="translate" 
+                        values="0,0; 0,100; 0,0" dur="3s" repeatCount="indefinite" />
+    </path>
+    <path d="M50,150 L30,120 L10,150 Z" fill="#ffffff">
+      <animateTransform attributeName="transform" type="translate" 
+                        values="0,0; 0,-100; 0,0" dur="3s" repeatCount="indefinite" />
+    </path>
+  </g>
+  
+  <!-- Equation elements -->
+  <g transform="translate(290, 100)" fill="#ffffff" opacity="0.9">
+    <text x="0" y="0" font-family="Arial" font-size="24" text-anchor="middle">y = f(x)</text>
+    <text x="0" y="30" font-family="Arial" font-size="18" text-anchor="middle">∑ wi·xi + b</text>
+  </g>
+  
+  <g transform="translate(290, 450)" fill="#ffffff" opacity="0.9">
+    <text x="0" y="0" font-family="Arial" font-size="20" text-anchor="middle">Data + AI = Insights</text>
+  </g>
+</svg>
