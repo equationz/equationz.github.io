@@ -1,6 +1,6 @@
 /* Base Styles */
 :root {
-    --primary-color: #0048e7;
+    --primary-color: #8D38C9;
     --secondary-color: #2AC4EA;
     --dark-color: #333333;
     --light-color: #ffffff;
@@ -229,7 +229,7 @@ nav ul li a:hover:after {
 
 /* Hero Section */
 .hero {
-    background-color: var(--light-color:);
+    background-color: var(--primary-color:);
     color: var(--light-color);
     padding: 150px 0 100px;
     position: relative;
