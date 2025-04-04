@@ -548,21 +548,26 @@ nav ul li a:hover:after {
 
 /* Footer */
 footer {
-    background-color: #333333;
+    background-color: #000000;
     color: #CCCCCC;
     padding: 70px 0 40px;
 }
 
 .footer-content {
     display: flex;
-    background-color: #333333;
     justify-content: space-between;
     margin-bottom: 50px;
 }
 
 .footer-logo {
+    background-color: var(--light-color);
     width: 150px;
-    margin-bottom: 20px;
+    height: 150px;
+    border-radius: 50%;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;   
 }
 
 .footer-links {
