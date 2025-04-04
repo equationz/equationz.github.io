@@ -563,7 +563,7 @@ footer {
     background-color: var(--light-color);
     width: 150px;
     height: 150px;
-    border-radius: 50%;
+    border-radius: 5%;
     padding: 20px;
     display: flex;
     align-items: center;
