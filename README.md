@@ -45,4 +45,3 @@ This website is designed to be deployed on GitHub Pages. To deploy:
 
 - Font Awesome for icons
 - Google Fonts for typography
-- Design inspired by cognida.ai
