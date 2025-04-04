@@ -229,7 +229,7 @@ nav ul li a:hover:after {
 
 /* Hero Section */
 .hero {
-    background-color: var(--primary-color);
+    background-color: var(--light-color:);
     color: var(--light-color);
     padding: 150px 0 100px;
     position: relative;
