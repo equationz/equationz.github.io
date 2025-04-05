@@ -95,25 +95,25 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Testimonial slider auto-scroll
-    const testimonialSlider = document.querySelector('.testimonial-slider');
+    // Announcement ribbon functionality
+    const announcementRibbon = document.querySelector('.announcement-ribbon');
+    const ribbonCloseBtn = document.querySelector('.ribbon-close');
     
-    if (testimonialSlider && testimonialSlider.children.length > 1) {
-        let scrollAmount = 0;
-        const slideWidth = testimonialSlider.querySelector('.testimonial').offsetWidth + 30; // width + gap
-        const maxScroll = testimonialSlider.scrollWidth - testimonialSlider.clientWidth;
+    if (ribbonCloseBtn && announcementRibbon) {
+        ribbonCloseBtn.addEventListener('click', function() {
+            announcementRibbon.style.display = 'none';
+            // Store in session that user closed the ribbon
+            sessionStorage.setItem('ribbonClosed', 'true');
+        });
         
-        setInterval(() => {
-            scrollAmount += slideWidth;
-            
-            if (scrollAmount > maxScroll) {
-                scrollAmount = 0;
-            }
-            
-            testimonialSlider.scrollTo({
-                left: scrollAmount,
-                behavior: 'smooth'
-            });
-        }, 5000);
+        // Check if user has closed the ribbon in this session
+        if (sessionStorage.getItem('ribbonClosed') === 'true') {
+            announcementRibbon.style.display = 'none';
+        }
+        
+        // Clone ticker content for continuous scrolling
+        const tickerContent = document.querySelector('.ticker-content');
+        const clone = tickerContent.cloneNode(true);
+        document.querySelector('.ticker-wrapper').appendChild(clone);
     }
 });
