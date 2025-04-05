@@ -10,6 +10,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Handle dropdown menus in mobile view
+    const dropdownToggles = document.querySelectorAll('.dropdown-toggle');
+    
+    dropdownToggles.forEach(toggle => {
+        toggle.addEventListener('click', function(e) {
+            if (nav.classList.contains('active')) {
+                e.preventDefault();
+                const parent = this.parentElement;
+                parent.classList.toggle('open');
+            }
+        });
+    });
+    
     // Header scroll effect
     const header = document.querySelector('header');
     
