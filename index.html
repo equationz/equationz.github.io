@@ -7,7 +7,12 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link href="https://fonts.googleapis.com/css?family=Poppins:300,400,600,700|Manrope:400,700,800|Heebo:400,700,800&display=swap" rel="stylesheet">
-</head>
+    <script>
+        function sendEmail() {
+            window.location = "mailto:enquiry@equationz.in";
+        }
+    </script>    
+</head>    
 <body>
     <header>
         <div class="container">
@@ -290,7 +295,7 @@
                 <div class="contact-info">
                     <div class="info-item">
                         <i class="fas fa-envelope"></i>
-                        <p>enquiry@equationz.in</p>
+                        <div onclick="sendEmail();"><p>enquiry@equationz.in</p></div>
                     </div>
                     <!-- 
                      <div class="info-item">
@@ -337,10 +342,5 @@
     </footer>
 
     <script src="script.js"></script>
-    <script>
-        function sendEmail() {
-            window.location = "mailto:enquiry@equationz.in";
-        }
-    </script>
 </body>
 </html>
