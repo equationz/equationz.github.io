@@ -288,9 +288,9 @@
                 </div>
                 -->
                 <div class="contact-info">
-                    <div class="info-item">
+                    <div class="info-item" onclick="sendEmail();>
                         <i class="fas fa-envelope"></i>
-                        <a href="enquiry@equationz.in"><p>enquiry@equationz.in</p></a>
+                        <p>enquiry@equationz.in</p>
                     </div>
                     <!-- 
                      <div class="info-item">
@@ -337,5 +337,10 @@
     </footer>
 
     <script src="script.js"></script>
+    <script>
+        function sendEmail() {
+            window.location = "mailto:enquiry@equationz.in";
+        }
+    </script>
 </body>
 </html>
