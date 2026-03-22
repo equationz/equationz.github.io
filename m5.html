@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mechanism 5 — Predictive Coding</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&family=Barlow+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #03060d;
+  --bg2:     #060c18;
+  --bg3:     #091322;
+  --panel:   #04080f;
+  --border:  #0e2040;
+  --pred:    #00ffcc;
+  --hot:     #ff6b00;
+  --staged:  #7b61ff;
+  --hit:     #00ff88;
+  --miss:    #ff3355;
+  --current: #38bdf8;
+  --text:    #c8deff;
+  --muted:   #2a4060;
+  --dim:     #081020;
+}
+
+- { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘Barlow Condensed’, sans-serif;
+min-height: 100vh; overflow-x: hidden;
+}
+
+/* Waveform background */
+#wave-bg {
+position: fixed; inset: 0;
+pointer-events: none; z-index: 0;
+}
+
+.wrapper {
+position: relative; z-index: 1;
+max-width: 1320px; margin: 0 auto;
+padding: 22px 20px;
+}
+
+/* ── Header ── */
+header {
+display: grid;
+grid-template-columns: auto 1fr auto;
+gap: 20px; align-items: center;
+margin-bottom: 20px;
+padding-bottom: 16px;
+border-bottom: 1px solid var(–border);
+}
+.mnum {
+font-family: ‘Syne’, sans-serif;
+font-size: 72px; font-weight: 800; line-height: 1;
+color: var(–pred); opacity: 0.15;
+letter-spacing: -4px;
+user-select: none;
+}
+.htitle h1 {
+font-family: ‘Syne’, sans-serif;
+font-size: clamp(20px, 3.5vw, 36px);
+font-weight: 800; letter-spacing: -0.3px;
+color: var(–text);
+}
+.htitle h1 span { color: var(–pred); }
+.htitle p {
+font-family: ‘DM Mono’, monospace;
+font-size: 10px; color: var(–muted);
+margin-top: 4px; letter-spacing: 2px; text-transform: uppercase;
+}
+.htags { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.htag {
+padding: 3px 10px; border-radius: 2px;
+font-family: ‘DM Mono’, monospace;
+font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 500;
+}
+.t1 { background:#00ffcc10; color:var(–pred);    border:1px solid #00ffcc25; }
+.t2 { background:#ff6b0010; color:var(–hot);     border:1px solid #ff6b0025; }
+.t3 { background:#7b61ff10; color:var(–staged);  border:1px solid #7b61ff25; }
+.t4 { background:#00ff8810; color:var(–hit);     border:1px solid #00ff8825; }
+
+/* ── Turn timeline ── */
+.timeline {
+display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.tl-turn {
+padding: 7px 16px; border-radius: 5px;
+font-family: ‘DM Mono’, monospace; font-size: 10px;
+letter-spacing: 0.5px; text-transform: uppercase;
+border: 1px solid var(–border); background: var(–bg2);
+color: var(–muted); cursor: pointer; transition: all .2s;
+display: flex; flex-direction: column; gap: 2px;
+}
+.tl-turn .tl-num { font-size: 8px; color: var(–muted); }
+.tl-turn .tl-label { font-weight: 600; }
+.tl-turn:hover { border-color: var(–pred); color: var(–pred); }
+.tl-turn.active {
+background: #00ffcc12; border-color: var(–pred); color: var(–pred);
+box-shadow: 0 0 16px #00ffcc20;
+}
+.tl-turn.past {
+background: #00ff8808; border-color: #00ff8830; color: #00ff8860;
+}
+
+/* ── Main grid ── */
+.main {
+display: grid;
+grid-template-columns: 1fr 350px;
+gap: 16px; align-items: start;
+}
+@media(max-width:960px) { .main { grid-template-columns:1fr; } }
+
+/* ── Stage ── */
+.stage {
+background: var(–bg2); border: 1px solid var(–border);
+border-radius: 10px; overflow: hidden;
+}
+canvas { display: block; width: 100%; }
+
+.ctrl {
+display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+padding: 11px 14px; border-top: 1px solid var(–border);
+background: var(–panel);
+}
+.btn {
+padding: 7px 16px; border-radius: 4px; border: none;
+font-family: ‘DM Mono’, monospace; font-size: 10px;
+letter-spacing: 1px; text-transform: uppercase;
+cursor: pointer; transition: all .2s; font-weight: 700;
+}
+.btn-run   { background: var(–pred); color: #03060d; }
+.btn-run:hover   { box-shadow: 0 0 20px #00ffcc50; transform: translateY(-1px); }
+.btn-run.paused  { background: var(–hot); color: #03060d; }
+.btn-step  { background: transparent; color: var(–muted); border: 1px solid var(–border); }
+.btn-step:hover  { border-color: var(–staged); color: var(–staged); }
+.btn-reset { background: transparent; color: var(–muted); border: 1px solid var(–border); }
+.btn-reset:hover { border-color: var(–miss); color: var(–miss); }
+.btn:disabled { opacity:.3; cursor:not-allowed; transform:none!important; box-shadow:none!important; }
+.sp-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.sp-lbl { font-family:‘DM Mono’,monospace; font-size:9px; color:var(–muted); }
+input[type=range] { width:72px; accent-color:var(–pred); }
+
+.sbar {
+padding: 7px 14px; border-top: 1px solid var(–border);
+background: var(–panel); display: flex; gap: 20px; flex-wrap: wrap;
+font-family: ‘DM Mono’, monospace; font-size: 9px; color: var(–muted);
+}
+.stt em { font-style:normal; font-weight:700; }
+.stt-p  em { color: var(–pred);   }
+.stt-h  em { color: var(–hot);    }
+.stt-s  em { color: var(–staged); }
+.stt-hi em { color: var(–hit);    }
+.stt-ms em { color: var(–miss);   }
+
+/* ── Side panel ── */
+.side { display: flex; flex-direction: column; gap: 14px; }
+.card {
+background: var(–bg2); border: 1px solid var(–border);
+border-radius: 10px; overflow: hidden;
+}
+.card-hd {
+padding: 8px 14px; border-bottom: 1px solid var(–border);
+background: var(–panel);
+font-family: ‘DM Mono’, monospace; font-size: 9px;
+font-weight: 500; color: var(–muted); text-transform: uppercase; letter-spacing: 2px;
+}
+.card-bd { padding: 12px 14px; }
+
+/* Pattern store */
+.pat-list { display: flex; flex-direction: column; gap: 7px; }
+.pat-row {
+display: flex; align-items: center; gap: 8px;
+padding: 6px 8px; border-radius: 4px;
+background: var(–bg3); border: 1px solid var(–border);
+font-family: ‘DM Mono’, monospace; font-size: 9px;
+transition: all .3s;
+}
+.pat-row.active { border-color: var(–pred); background: #00ffcc08; }
+.pat-row.firing { border-color: var(–hot);  background: #ff6b0012; animation: patFire .5s ease; }
+@keyframes patFire { 0%{box-shadow:0 0 20px #ff6b0060} 100%{box-shadow:none} }
+.pat-from { color: var(–current); flex: 1; }
+.pat-arrow { color: var(–muted); }
+.pat-to   { color: var(–pred); flex: 1; }
+.pat-prob {
+padding: 1px 6px; border-radius: 2px; font-size: 8px; font-weight: 700;
+min-width: 36px; text-align: center;
+}
+.pat-prob.high { background:#00ffcc18; color:var(–pred); border:1px solid #00ffcc30; }
+.pat-prob.mid  { background:#7b61ff18; color:var(–staged); border:1px solid #7b61ff30; }
+.pat-prob.low  { background:#ff335518; color:var(–miss); border:1px solid #ff335530; }
+
+/* Staged buffers */
+.buf-list { display: flex; flex-direction: column; gap: 8px; }
+.buf-card {
+padding: 8px 10px; border-radius: 5px;
+border: 1px solid var(–border); background: var(–bg3);
+font-family: ‘DM Mono’, monospace; font-size: 9px;
+transition: all .4s;
+}
+.buf-card.staging { border-color: var(–staged); background: #7b61ff0a;
+animation: stageIn .4s ease; }
+.buf-card.promoted { border-color: var(–hit); background: #00ff880a; }
+.buf-card.discarded { border-color: var(–miss); opacity: .4; }
+@keyframes stageIn { from {transform:translateY(6px);opacity:0} to {transform:none;opacity:1} }
+.buf-name { font-weight: 600; margin-bottom: 3px; }
+.buf-name.staging  { color: var(–staged); }
+.buf-name.promoted { color: var(–hit); }
+.buf-name.discarded{ color: var(–miss); }
+.buf-meta { color: var(–muted); font-size: 8px; }
+
+/* Latency meter */
+.lat-bar-wrap { margin-top: 6px; }
+.lat-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+.lat-label { font-family:‘DM Mono’,monospace; font-size:10px; color:var(–muted); }
+.lat-val   { font-family:‘DM Mono’,monospace; font-size:12px; font-weight:700; }
+.lat-val.fast { color: var(–hit); }
+.lat-val.slow { color: var(–miss); }
+.lat-track { height:6px; background:var(–dim); border-radius:3px; overflow:hidden; }
+.lat-fill  { height:100%; border-radius:3px; transition: width .6s ease; }
+
+/* Prediction log */
+.pred-log {
+max-height: 160px; overflow-y: auto;
+font-family: ‘DM Mono’, monospace; font-size: 9px;
+}
+.pred-log::-webkit-scrollbar { width:3px; }
+.pred-log::-webkit-scrollbar-thumb { background:var(–border); }
+.pred-entry {
+padding: 4px 0; border-bottom: 1px solid var(–dim);
+display: flex; justify-content: space-between; align-items: center;
+animation: pIn .25s ease;
+}
+.pred-entry:last-child { border-bottom: none; }
+@keyframes pIn { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:none} }
+.pred-text { color: var(–text); }
+.pred-badge {
+padding: 1px 6px; border-radius: 2px; font-size: 8px; font-weight: 700;
+}
+.pred-badge.hit    { background:#00ff8818; color:var(–hit);    border:1px solid #00ff8830; }
+.pred-badge.miss   { background:#ff335518; color:var(–miss);   border:1px solid #ff335530; }
+.pred-badge.stage  { background:#7b61ff18; color:var(–staged); border:1px solid #7b61ff30; }
+.pred-badge.update { background:#ff6b0018; color:var(–hot);    border:1px solid #ff6b0025; }
+
+/* Concept */
+.concept {
+font-family: ‘DM Mono’, monospace;
+font-size: 11px; line-height: 1.8; color: var(–text);
+}
+.concept .cp { color: var(–pred);   font-weight:700; }
+.concept .ch { color: var(–hot);    font-weight:700; }
+.concept .cs { color: var(–staged); font-weight:700; }
+.concept .ci { color: var(–hit);    font-weight:700; }
+.concept .cm { color: var(–miss);   font-weight:700; }
+</style>
+
+</head>
+<body>
+
+<canvas id="wave-bg"></canvas>
+
+<div class="wrapper">
+  <header>
+    <div class="mnum">05</div>
+    <div class="htitle">
+      <h1>Predictive <span>Coding</span></h1>
+      <p>Anticipatory Context Pre-loading · Hot-Path Pattern Store · Staged Buffer Promotion</p>
+    </div>
+    <div class="htags">
+      <div class="htag t1">Predictive Brain</div>
+      <div class="htag t2">Hot-Path Store</div>
+      <div class="htag t3">Staged Buffer</div>
+      <div class="htag t4">Buffer Promotion</div>
+    </div>
+  </header>
+
+  <div class="timeline" id="timeline">
+    <div class="tl-turn active" data-t="0">
+      <span class="tl-num">Turn 1</span>
+      <span class="tl-label">Bug Investigation</span>
+    </div>
+    <div class="tl-turn" data-t="1">
+      <span class="tl-num">Turn 2</span>
+      <span class="tl-label">Gateway Found</span>
+    </div>
+    <div class="tl-turn" data-t="2">
+      <span class="tl-num">Turn 3</span>
+      <span class="tl-label">Compliance → HIT</span>
+    </div>
+    <div class="tl-turn" data-t="3">
+      <span class="tl-num">Turn 4</span>
+      <span class="tl-label">Incident → MISS</span>
+    </div>
+    <div class="tl-turn" data-t="4">
+      <span class="tl-num">Pattern Update</span>
+      <span class="tl-label">Store Learns</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <div>
+      <div class="stage">
+        <canvas id="main"></canvas>
+        <div class="ctrl">
+          <button class="btn btn-run"   id="runBtn">▶ Run</button>
+          <button class="btn btn-step"  id="stepBtn">Step</button>
+          <button class="btn btn-reset" id="resetBtn">↺ Reset</button>
+          <div class="sp-right">
+            <span class="sp-lbl">Speed</span>
+            <input type="range" id="spd" min="0.4" max="3" step="0.2" value="1">
+          </div>
+        </div>
+        <div class="sbar">
+          <div class="stt stt-p">Turn: <em id="stTurn">—</em></div>
+          <div class="stt stt-h">Pattern: <em id="stPat">—</em></div>
+          <div class="stt stt-s">Staged: <em id="stStaged">0</em></div>
+          <div class="stt stt-hi">Hits: <em id="stHit">0</em></div>
+          <div class="stt stt-ms">Misses: <em id="stMiss">0</em></div>
+        </div>
+      </div>
+    </div>
+
+```
+<div class="side">
+
+  <div class="card">
+    <div class="card-hd">What Is Predictive Coding?</div>
+    <div class="card-bd">
+      <div class="concept">
+        The brain doesn't wait — it <span class="cp">predicts</span> what's needed next and <span class="cs">pre-assembles</span> it.<br><br>
+        The <span class="ch">hot-path store</span> learns task-type sequences. High-confidence predictions are <span class="cs">staged</span> in background buffers during the current turn.<br><br>
+        On a <span class="ci">HIT</span>: buffer promoted instantly (~12ms). On a <span class="cm">MISS</span>: standard pipeline runs (~550ms) and the store <span class="ch">learns</span>.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Hot-Path Pattern Store</div>
+    <div class="card-bd" style="padding:8px 10px;">
+      <div class="pat-list" id="patList"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Staged Buffers</div>
+    <div class="card-bd" style="padding:8px 10px;">
+      <div class="buf-list" id="bufList">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);padding:4px 0;">
+          — no buffers staged yet —
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Latency Comparison</div>
+    <div class="card-bd">
+      <div class="lat-bar-wrap">
+        <div class="lat-row">
+          <span class="lat-label">Without prediction</span>
+          <span class="lat-val slow" id="latBase">550ms</span>
+        </div>
+        <div class="lat-track"><div class="lat-fill" id="latBaseBar" style="width:100%;background:#ff335540;"></div></div>
+        <div style="margin-top:10px;"></div>
+        <div class="lat-row">
+          <span class="lat-label">With prediction (HIT)</span>
+          <span class="lat-val fast" id="latPred">—</span>
+        </div>
+        <div class="lat-track"><div class="lat-fill" id="latPredBar" style="width:2%;background:#00ff8840;"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Prediction Log</div>
+    <div class="card-bd" style="padding:0;">
+      <div class="pred-log" id="predLog" style="padding:8px 12px;"></div>
+    </div>
+  </div>
+
+</div>
+```
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// WAVE BACKGROUND
+// ─────────────────────────────────────────────────────────────────────────────
+(function() {
+  const c = document.getElementById('wave-bg');
+  const cx = c.getContext('2d');
+  let t = 0;
+  function resize() { c.width = window.innerWidth; c.height = window.innerHeight; }
+  resize(); window.addEventListener('resize', resize);
+  function draw() {
+    cx.clearRect(0, 0, c.width, c.height);
+    for (let w = 0; w < 5; w++) {
+      cx.strokeStyle = `rgba(0,255,204,${0.015 + w*0.008})`;
+      cx.lineWidth = 1;
+      cx.beginPath();
+      for (let x = 0; x < c.width; x += 3) {
+        const y = c.height/2
+          + Math.sin(x/200 + t*0.3 + w*0.8) * (30 + w*18)
+          + Math.sin(x/90  - t*0.5 + w*1.2) * (12 + w*8);
+        x === 0 ? cx.moveTo(x, y) : cx.lineTo(x, y);
+      }
+      cx.stroke();
+    }
+    t += 0.008;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA
+// ─────────────────────────────────────────────────────────────────────────────
+const PATTERNS = [
+  { id:'P1', from:'bug_investigation',    to:'gateway_investigation', prob:0.89, theta:0.70 },
+  { id:'P2', from:'gateway_investigation',to:'compliance_check',      prob:0.82, theta:0.70 },
+  { id:'P3', from:'gateway_investigation',to:'patch_authoring',       prob:0.74, theta:0.70 },
+  { id:'P4', from:'gateway_investigation',to:'incident_report',       prob:0.61, theta:0.70 },
+  { id:'P5', from:'compliance_check',     to:'audit_filing',          prob:0.78, theta:0.70 },
+];
+
+// Staged buffer templates
+const BUFFERS = {
+  compliance: {
+    id:'BUF_A', name:'Buffer A — Compliance Check',
+    nodes:['PCIDSSAuditRequirement','StripeComplianceCert','DataResidencyRule','CardholderDataScope','BreachNotificationPolicy'],
+    tokens: 970, predicts:'compliance_check', prob:0.82,
+  },
+  patch: {
+    id:'BUF_B', name:'Buffer B — Patch Authoring',
+    nodes:['IdempotencyKeyImpl','StripeWebhookDedup','DatabaseTransactionLock','UnitTestPattern','RegressionTestSuite'],
+    tokens: 965, predicts:'patch_authoring', prob:0.74,
+  },
+};
+
+// Turns
+const TURNS_DATA = [
+  {
+    id:0, label:'Bug Investigation', taskType:'bug_investigation',
+    tso:'task: bug_investigation · domain: payment · issue: duplicate txns',
+    action:'Look up hot-path patterns from bug_investigation',
+    predicts:[], stages:[], hitMiss:null, latency:550, learnDelta:null,
+  },
+  {
+    id:1, label:'Gateway Found', taskType:'gateway_investigation',
+    tso:'finding: Stripe gateway · entity: StripeWebhookHandler',
+    action:'Pattern P2(0.82≥θ) & P3(0.74≥θ) → pre-assemble buffers A & B in background',
+    predicts:['compliance','patch'], stages:['compliance','patch'], hitMiss:null, latency:550, learnDelta:null,
+  },
+  {
+    id:2, label:'Compliance → HIT', taskType:'compliance_check',
+    tso:'finding: stored card data confirmed · compliance required',
+    action:'Buffer A matches compliance_check → PROMOTE instantly',
+    predicts:[], stages:[], hitMiss:'hit', latency:12, learnDelta:null,
+  },
+  {
+    id:3, label:'Incident Report → MISS', taskType:'incident_report',
+    tso:'escalation: P1 incident · severity: critical',
+    action:'No staged buffer matches incident_report → standard pipeline · store updates P4',
+    predicts:[], stages:[], hitMiss:'miss', latency:550, learnDelta:{ patId:'P4', oldProb:0.61, newProb:0.67 },
+  },
+  {
+    id:4, label:'Pattern Store Updates', taskType:'(learning)',
+    tso:'— post-turn pattern update —',
+    action:'P4 upweighted: 0.61→0.67 | P2 downweighted: 0.82→0.79',
+    predicts:[], stages:[], hitMiss:null, latency:null,
+    learnDelta2:{ upId:'P4', upOld:0.61, upNew:0.67, downId:'P2', downOld:0.82, downNew:0.79 },
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CANVAS
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('main');
+const ctx    = canvas.getContext('2d');
+let W, H;
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  W = r.width; H = 540; canvas.width = W; canvas.height = H;
+  canvas.style.height = H + 'px';
+}
+resize(); window.addEventListener('resize', () => { resize(); });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LAYOUT
+// Visual zones left→right:
+//  [CURRENT TURN TSO] → [BRAIN MODEL] → [STAGED BUFFERS] → [WORKING MEMORY / RESULT]
+// ─────────────────────────────────────────────────────────────────────────────
+function L() {
+  return {
+    tsoX:    W * 0.12,
+    brainX:  W * 0.35,
+    brainY:  H * 0.46,
+    brainR:  52,
+    bufX:    W * 0.62,
+    wmX:     W * 0.87,
+    rowH:    58,
+    startY:  88,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let st = {
+  currentTurn:   -1,
+  patternProbs:  { P1:0.89, P2:0.82, P3:0.74, P4:0.61, P5:0.78 },
+  stagedBuffers: [],   // { bufKey, status:'staging'|'promoted'|'discarded' }
+  hitMiss:       null,
+  latency:       null,
+  brainGlow:     0,
+  brainGlowCol:  '#00ffcc',
+  particles:     [],
+  pulseRings:    [],   // { x,y,r,maxR,t,color }
+  animating:     false,
+  busy:          false,
+  speed:         1,
+  hitCount:      0,
+  missCount:     0,
+  activePatIds:  [],
+};
+
+let allSteps = [];
+let stepIdx  = 0;
+let autoTimer = null;
+let rafId;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARTICLES
+// ─────────────────────────────────────────────────────────────────────────────
+function spawnParticles(x, y, tx, ty, color, n = 1) {
+  for (let i = 0; i < n; i++) {
+    st.particles.push({
+      x, y, tx: tx + (Math.random()-.5)*20, ty: ty + (Math.random()-.5)*20,
+      t: 0, color, trail: [],
+    });
+  }
+}
+
+function spawnRing(x, y, color) {
+  st.pulseRings.push({ x, y, r: 10, maxR: 90, t: 0, color });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+function drawBrain(l, now) {
+  const { brainX: bx, brainY: by, brainR: br } = l;
+  ctx.save();
+
+  // Sine-wave bands (predictive model metaphor)
+  for (let band = 0; band < 5; band++) {
+    const amp = 8 + band * 5, freq = 0.04 + band*0.015;
+    const phase = now/2000 + band * 0.7;
+    ctx.strokeStyle = `rgba(0,255,204,${0.06 + band*0.025})`;
+    ctx.lineWidth = 0.8;
+    ctx.save(); ctx.beginPath();
+    ctx.arc(bx, by, br, 0, Math.PI*2);
+    ctx.clip();
+    ctx.beginPath();
+    for (let x = bx-br; x <= bx+br; x += 2) {
+      const y = by + Math.sin(x*freq + phase)*amp + (band-2)*10;
+      x === bx-br ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.stroke(); ctx.restore();
+  }
+
+  // Outer pulse rings
+  for (let i = 0; i < 3; i++) {
+    const t2 = ((now/(2200+i*600))%1);
+    ctx.globalAlpha = (1-t2)*0.15;
+    ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(bx, by, br + 18 + t2*40, 0, Math.PI*2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Glow flash
+  if (st.brainGlow > 0) {
+    ctx.globalAlpha = Math.min(1, st.brainGlow) * 0.55;
+    ctx.shadowColor = st.brainGlowCol; ctx.shadowBlur = 50;
+    ctx.fillStyle = st.brainGlowCol;
+    ctx.beginPath(); ctx.arc(bx, by, br+20, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0; st.brainGlow -= 0.022;
+    if (st.brainGlow < 0) st.brainGlow = 0;
+  }
+  ctx.globalAlpha = 1;
+
+  // Body
+  const g = ctx.createRadialGradient(bx, by-10, 0, bx, by, br);
+  g.addColorStop(0, '#001a14'); g.addColorStop(1, '#030d08');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 2;
+  ctx.shadowColor = '#00ffcc'; ctx.shadowBlur = 20;
+  ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+
+  // Icon: wavy brain symbol
+  ctx.strokeStyle = '#00ffcc70'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(bx-20, by);
+  ctx.bezierCurveTo(bx-20, by-18, bx-4, by-18, bx, by-8);
+  ctx.bezierCurveTo(bx+4, by-18, bx+20, by-18, bx+20, by);
+  ctx.bezierCurveTo(bx+20, by+14, bx+4, by+14, bx, by+6);
+  ctx.bezierCurveTo(bx-4, by+14, bx-20, by+14, bx-20, by);
+  ctx.stroke();
+
+  ctx.font = "bold 9px 'Syne'";
+  ctx.textAlign = 'center'; ctx.fillStyle = '#00ffcc';
+  ctx.fillText('PREDICTIVE', bx, by+br+14);
+  ctx.fillText('MODEL', bx, by+br+25);
+
+  ctx.restore();
+}
+
+function drawTSOBox(l, turn) {
+  if (!turn) return;
+  const bx = l.tsoX-80, by = 10, bw = 160, bh = 58;
+  ctx.save();
+  ctx.fillStyle = '#04080f';
+  ctx.strokeStyle = '#00ffcc30'; ctx.lineWidth = 1;
+  ctx.shadowColor = '#00ffcc'; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 6); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.font = "bold 8px 'DM Mono'"; ctx.textAlign = 'left'; ctx.fillStyle = '#00ffcc90';
+  ctx.fillText('TSO TURN '+(turn.id+1), bx+8, by+13);
+  ctx.font = "bold 9px 'DM Mono'"; ctx.fillStyle = '#38bdf8';
+  ctx.fillText(turn.taskType, bx+8, by+26);
+  ctx.font = "7.5px 'DM Mono'"; ctx.fillStyle = '#2a4060';
+  const words = turn.tso.split(' · ');
+  words.forEach((w,i) => ctx.fillText(w, bx+8, by+38+i*11));
+  ctx.restore();
+}
+
+function drawStagedBuffers(l) {
+  if (st.stagedBuffers.length === 0) {
+    ctx.save();
+    ctx.font = "9px 'DM Mono'"; ctx.textAlign = 'center';
+    ctx.fillStyle = '#2a4060';
+    ctx.fillText('no staged buffers', l.bufX, l.startY + 20);
+    ctx.restore();
+    return;
+  }
+  st.stagedBuffers.forEach((sb, i) => {
+    const buf = BUFFERS[sb.bufKey];
+    const by2 = l.startY + i * 150;
+    const bw = 154, bh = 136;
+    const bx2 = l.bufX;
+
+    const col = sb.status==='promoted' ? '#00ff88'
+              : sb.status==='discarded' ? '#ff3355'
+              : '#7b61ff';
+    const alpha = sb.status==='discarded' ? 0.35 : 1;
+
+    ctx.save(); ctx.globalAlpha = alpha;
+    ctx.shadowColor = col; ctx.shadowBlur = sb.status==='promoted' ? 20 : 8;
+    ctx.fillStyle = '#04080f';
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(bx2-bw/2, by2, bw, bh, 7);
+    ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+
+    // Header
+    ctx.font = "bold 8px 'DM Mono'"; ctx.textAlign = 'center'; ctx.fillStyle = col;
+    const statusLabel = sb.status==='staging' ? '◉ STAGED'
+                      : sb.status==='promoted' ? '▲ PROMOTED'
+                      : '✕ DISCARDED';
+    ctx.fillText(statusLabel, bx2, by2+13);
+
+    // Buffer name
+    ctx.font = "7.5px 'DM Mono'"; ctx.fillStyle = '#c8deff';
+    ctx.fillText(buf.name.slice(0,22), bx2, by2+24);
+
+    // Probability
+    ctx.font = "bold 9px 'DM Mono'"; ctx.fillStyle = col;
+    ctx.fillText(`P=${buf.prob.toFixed(2)} | ${buf.tokens}t`, bx2, by2+36);
+
+    // Node list
+    ctx.font = "7px 'DM Mono'"; ctx.fillStyle = '#2a4060';
+    buf.nodes.forEach((n,ni) => {
+      ctx.fillStyle = ni === 0 ? '#7b61ff80' : '#2a4060';
+      ctx.fillText('· '+n.slice(0,20), bx2, by2+50+ni*16);
+    });
+
+    ctx.restore();
+  });
+}
+
+function drawWMResult(l) {
+  if (st.hitMiss === null) return;
+  const rx = l.wmX, ry = H * 0.35;
+  const bw = 130, bh = 90;
+  const isHit = st.hitMiss === 'hit';
+  const col = isHit ? '#00ff88' : '#ff3355';
+
+  ctx.save();
+  ctx.shadowColor = col; ctx.shadowBlur = 24;
+  ctx.fillStyle = '#04080f';
+  ctx.strokeStyle = col; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(rx-bw/2, ry-bh/2, bw, bh, 8);
+  ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+
+  // Big verdict
+  ctx.font = "bold 28px 'Syne'"; ctx.textAlign = 'center'; ctx.fillStyle = col;
+  ctx.shadowColor = col; ctx.shadowBlur = 16;
+  ctx.fillText(isHit ? 'HIT' : 'MISS', rx, ry+8);
+  ctx.shadowBlur = 0;
+
+  ctx.font = "8px 'DM Mono'"; ctx.fillStyle = col+'90';
+  ctx.fillText(isHit ? 'buffer promoted' : 'standard pipeline', rx, ry+24);
+  ctx.fillText(isHit ? '~12ms latency' : '~550ms latency', rx, ry+35);
+
+  ctx.restore();
+
+  // Latency bar update
+  if (isHit) {
+    document.getElementById('latPred').textContent = '12ms';
+    document.getElementById('latPredBar').style.width = '2.2%';
+    document.getElementById('latPredBar').style.background = '#00ff8880';
+  }
+}
+
+function drawPulseRings() {
+  st.pulseRings = st.pulseRings.filter(r => r.t < 1);
+  st.pulseRings.forEach(r => {
+    ctx.save();
+    ctx.globalAlpha = (1-r.t) * 0.5;
+    ctx.strokeStyle = r.color; ctx.lineWidth = 1.5;
+    ctx.shadowColor = r.color; ctx.shadowBlur = 8;
+    const cr = r.r + r.t * r.maxR;
+    ctx.beginPath(); ctx.arc(r.x, r.y, cr, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+    r.t += 0.018 * st.speed;
+  });
+}
+
+function drawParticles() {
+  st.particles = st.particles.filter(p => p.t < 1);
+  st.particles.forEach(p => {
+    const x = p.x + (p.tx-p.x)*p.t;
+    const y = p.y + (p.ty-p.y)*p.t + Math.sin(p.t*Math.PI)*-50;
+    for (let i=1;i<=4;i++) {
+      const tt = Math.max(0, p.t-i*0.06);
+      const tx2 = p.x+(p.tx-p.x)*tt, ty2 = p.y+(p.ty-p.y)*tt+Math.sin(tt*Math.PI)*-50;
+      ctx.save(); ctx.globalAlpha = 0.15-i*0.03;
+      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(tx2,ty2,4-i,0,Math.PI*2); ctx.fill(); ctx.restore();
+    }
+    ctx.save(); ctx.globalAlpha=0.9; ctx.fillStyle=p.color;
+    ctx.shadowColor=p.color; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); ctx.restore();
+    p.t += 0.015 * st.speed;
+  });
+}
+
+function drawConnectorLines(l) {
+  ctx.save();
+  // TSO → Brain
+  const g1 = ctx.createLinearGradient(l.tsoX+80, l.brainY, l.brainX-l.brainR, l.brainY);
+  g1.addColorStop(0,'#2a406050'); g1.addColorStop(1,'#00ffcc40');
+  ctx.strokeStyle=g1; ctx.lineWidth=1; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(l.tsoX+80, l.brainY); ctx.lineTo(l.brainX-l.brainR-8, l.brainY);
+  ctx.stroke();
+  // Brain → Buffers
+  const g2 = ctx.createLinearGradient(l.brainX+l.brainR, l.brainY, l.bufX-80, l.brainY);
+  g2.addColorStop(0,'#00ffcc40'); g2.addColorStop(1,'#7b61ff40');
+  ctx.strokeStyle=g2;
+  ctx.beginPath(); ctx.moveTo(l.brainX+l.brainR+8, l.brainY); ctx.lineTo(l.bufX-80, l.brainY);
+  ctx.stroke();
+  // Buffers → WM
+  const g3 = ctx.createLinearGradient(l.bufX+80, l.brainY, l.wmX-68, l.brainY);
+  g3.addColorStop(0,'#7b61ff40'); g3.addColorStop(1,'#00ff8840');
+  ctx.strokeStyle=g3;
+  ctx.beginPath(); ctx.moveTo(l.bufX+80, l.brainY); ctx.lineTo(l.wmX-68, l.brainY);
+  ctx.stroke();
+  ctx.setLineDash([]); ctx.restore();
+}
+
+function drawColLabels(l) {
+  const cols = [
+    { x:l.tsoX,  t:'CURRENT TSO',     c:'#2a4060' },
+    { x:l.brainX,t:'PREDICTIVE MODEL', c:'#00ffcc40' },
+    { x:l.bufX,  t:'STAGED BUFFERS',   c:'#7b61ff40' },
+    { x:l.wmX,   t:'RESULT',           c:'#00ff8840' },
+  ];
+  cols.forEach(cl => {
+    ctx.save();
+    ctx.font = "bold 8px 'DM Mono'"; ctx.textAlign='center';
+    ctx.fillStyle = cl.c; ctx.fillText(cl.t, cl.x, 64);
+    ctx.globalAlpha=0.05; ctx.strokeStyle=cl.c; ctx.lineWidth=1;
+    ctx.setLineDash([3,6]);
+    ctx.beginPath(); ctx.moveTo(cl.x,70); ctx.lineTo(cl.x,H-20); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+  });
+}
+
+function drawθLine(l) {
+  // θ_predict threshold line across pattern region
+  ctx.save();
+  ctx.strokeStyle = '#ff6b0030'; ctx.lineWidth = 1; ctx.setLineDash([3,5]);
+  ctx.beginPath(); ctx.moveTo(20, H*0.78); ctx.lineTo(W-20, H*0.78); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.font = "8px 'DM Mono'"; ctx.textAlign='left'; ctx.fillStyle='#ff6b0060';
+  ctx.fillText('θ_predict = 0.70', 24, H*0.78-5);
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN RENDER LOOP
+// ─────────────────────────────────────────────────────────────────────────────
+function render(now = 0) {
+  ctx.clearRect(0,0,W,H);
+  const l = L();
+  const bg = ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#03060d'); bg.addColorStop(1,'#060c18');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  // dots
+  ctx.fillStyle='#0e2040';
+  for(let gx=22;gx<W;gx+=44) for(let gy=22;gy<H;gy+=44){
+    ctx.beginPath(); ctx.arc(gx,gy,.7,0,Math.PI*2); ctx.fill();
+  }
+  drawθLine(l);
+  drawColLabels(l);
+  drawConnectorLines(l);
+  drawBrain(l, now);
+  drawTSOBox(l, TURNS_DATA[st.currentTurn] || TURNS_DATA[0]);
+  drawStagedBuffers(l);
+  drawWMResult(l);
+  drawPulseRings();
+  drawParticles();
+  rafId = requestAnimationFrame(render);
+}
+rafId = requestAnimationFrame(render);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP MACHINE
+// ─────────────────────────────────────────────────────────────────────────────
+function buildSteps() {
+  const steps = [];
+
+  // Turn 0 — bug investigation, look up patterns
+  steps.push({
+    tIdx:0, label:'Turn 1: Bug Investigation',
+    action() {
+      st.currentTurn = 0;
+      st.brainGlow = 1.2; st.brainGlowCol = '#00ffcc';
+      const l = L();
+      spawnRing(l.brainX, l.brainY, '#00ffcc');
+      setTurnActive(0);
+      logPred('Pattern lookup: bug_investigation', 'stage');
+      updateStats();
+    }
+  });
+
+  steps.push({
+    tIdx:0, label:'P1: bug_investigation → gateway_investigation (0.89 ≥ θ)',
+    action() {
+      st.activePatIds = ['P1'];
+      renderPatList();
+      logPred('P1: bug→gateway  P=0.89 ≥ θ → will pre-assemble', 'stage');
+      updateStats();
+    }
+  });
+
+  // Turn 1 — gateway investigation, stage buffers
+  steps.push({
+    tIdx:1, label:'Turn 2: Gateway Found — Stage Buffers',
+    action() {
+      st.currentTurn = 1;
+      st.brainGlow = 1.5; st.brainGlowCol = '#7b61ff';
+      const l = L();
+      spawnRing(l.brainX, l.brainY, '#7b61ff');
+      setTurnActive(1);
+      updateStats();
+    }
+  });
+
+  steps.push({
+    tIdx:1, label:'P2: gateway → compliance_check (0.82 ≥ θ) → stage Buffer A',
+    action() {
+      st.activePatIds = ['P2','P3'];
+      renderPatList();
+      const l = L();
+      spawnParticles(l.brainX+l.brainR, l.brainY, l.bufX-80, l.startY+68, '#7b61ff', 3);
+      st.stagedBuffers.push({ bufKey:'compliance', status:'staging' });
+      renderBufList();
+      logPred('Buffer A staged: compliance_check (P=0.82)', 'stage');
+      updateStats();
+    }
+  });
+
+  steps.push({
+    tIdx:1, label:'P3: gateway → patch_authoring (0.74 ≥ θ) → stage Buffer B',
+    action() {
+      const l = L();
+      spawnParticles(l.brainX+l.brainR, l.brainY, l.bufX-80, l.startY+68+150, '#7b61ff', 3);
+      st.stagedBuffers.push({ bufKey:'patch', status:'staging' });
+      renderBufList();
+      logPred('Buffer B staged: patch_authoring (P=0.74)', 'stage');
+      updateStats();
+    }
+  });
+
+  steps.push({
+    tIdx:1, label:'P4: gateway → incident_report (0.61 < θ) → skip',
+    action() {
+      renderPatList();
+      logPred('P4: incident_report P=0.61 < θ → NOT staged', 'miss');
+      updateStats();
+    }
+  });
+
+  // Turn 2 — compliance check → HIT
+  steps.push({
+    tIdx:2, label:'Turn 3: Compliance Check arrives → MATCH Buffer A',
+    action() {
+      st.currentTurn = 2;
+      st.brainGlow = 2; st.brainGlowCol = '#00ff88';
+      const l = L();
+      spawnRing(l.brainX, l.brainY, '#00ff88');
+      setTurnActive(2);
+      updateStats();
+    }
+  });
+
+  steps.push({
+    tIdx:2, label:'Buffer A → PROMOTE (HIT — 12ms latency)',
+    action() {
+      const idx = st.stagedBuffers.findIndex(b => b.bufKey === 'compliance');
+      if (idx !== -1) st.stagedBuffers[idx].status = 'promoted';
+      const bPatch = st.stagedBuffers.findIndex(b => b.bufKey === 'patch');
+      if (bPatch !== -1) st.stagedBuffers[bPatch].status = 'discarded';
+      renderBufList();
+      st.hitMiss = 'hit'; st.latency = 12;
+      const l = L();
+      spawnParticles(l.bufX+80, l.brainY, l.wmX, H*0.35, '#00ff88', 4);
+      spawnRing(l.wmX, H*0.35, '#00ff88');
+      st.hitCount++;
+      logPred('HIT! Buffer A promoted → ~12ms', 'hit');
+      setLatency(12);
+      updateStats();
+    }
+  });
+
+  // Turn 3 — incident report → MISS
+  steps.push({
+    tIdx:3, label:'Turn 4: Incident Report arrives → NO MATCH',
+    action() {
+      st.currentTurn = 3;
+      st.hitMiss = 'miss'; st.latency = 550;
+      st.brainGlow = 1.5; st.brainGlowCol = '#ff3355';
+      const l = L();
+      spawnRing(l.brainX, l.brainY, '#ff3355');
+      setTurnActive(3);
+      updateStats();
+    }
+  });
+
+  steps.push({
+    tIdx:3, label:'No staged buffer → standard pipeline (550ms)',
+    action() {
+      st.missCount++;
+      logPred('MISS: incident_report had no staged buffer → 550ms', 'miss');
+      setLatency(550);
+      updateStats();
+    }
+  });
+
+  // Turn 4 — learning
+  steps.push({
+    tIdx:4, label:'Pattern Store Updates from MISS',
+    action() {
+      st.currentTurn = 4;
+      st.brainGlow = 1; st.brainGlowCol = '#ff6b00';
+      const l = L();
+      spawnRing(l.brainX, l.brainY, '#ff6b00');
+      setTurnActive(4);
+      updateStats();
+    }
+  });
+
+  steps.push({
+    tIdx:4, label:'P4 upweighted 0.61→0.67 | P2 downweighted 0.82→0.79',
+    action() {
+      st.patternProbs['P4'] = 0.67;
+      st.patternProbs['P2'] = 0.79;
+      st.activePatIds = ['P4','P2'];
+      renderPatList();
+      logPred('P4 upweighted: 0.61→0.67 (incident observed)', 'update');
+      logPred('P2 downweighted: 0.82→0.79 (compliance hit already)', 'update');
+      updateStats();
+    }
+  });
+
+  return steps;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SIDE PANEL RENDERERS
+// ─────────────────────────────────────────────────────────────────────────────
+function renderPatList() {
+  const el = document.getElementById('patList');
+  el.innerHTML = PATTERNS.map(p => {
+    const prob = st.patternProbs[p.id] || p.prob;
+    const probClass = prob >= 0.80 ? 'high' : prob >= 0.70 ? 'mid' : 'low';
+    const isActive = st.activePatIds.includes(p.id);
+    const aboveTheta = prob >= p.theta;
+    return `<div class="pat-row ${isActive?'firing':''}">
+      <span class="pat-from">${p.from.replace(/_/g,'_\u200b')}</span>
+      <span class="pat-arrow">→</span>
+      <span class="pat-to">${p.to.replace(/_/g,'_\u200b')}</span>
+      <span class="pat-prob ${probClass}">${prob.toFixed(2)}${aboveTheta?'✓':'✗'}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderBufList() {
+  const el = document.getElementById('bufList');
+  if (st.stagedBuffers.length === 0) {
+    el.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);padding:4px 0;">— no buffers staged yet —</div>';
+    return;
+  }
+  el.innerHTML = st.stagedBuffers.map(sb => {
+    const buf = BUFFERS[sb.bufKey];
+    return `<div class="buf-card ${sb.status}">
+      <div class="buf-name ${sb.status}">${buf.name}</div>
+      <div class="buf-meta">predicts: ${buf.predicts} · P=${buf.prob.toFixed(2)} · ${buf.tokens}t</div>
+      <div class="buf-meta" style="margin-top:3px;">${buf.nodes.slice(0,3).join(', ')}…</div>
+    </div>`;
+  }).join('');
+}
+
+function logPred(text, type) {
+  const log = document.getElementById('predLog');
+  const e = document.createElement('div'); e.className = 'pred-entry';
+  const labels = { hit:'HIT', miss:'MISS', stage:'STAGED', update:'UPDATE' };
+  e.innerHTML = `<span class="pred-text">${text}</span><span class="pred-badge ${type}">${labels[type]||type}</span>`;
+  log.appendChild(e); log.scrollTop = log.scrollHeight;
+}
+
+function setTurnActive(idx) {
+  document.querySelectorAll('.tl-turn').forEach((b,i) => {
+    b.classList.remove('active','past');
+    if (i === idx) b.classList.add('active');
+    else if (i < idx) b.classList.add('past');
+  });
+}
+
+function setLatency(ms) {
+  const isPred = ms < 100;
+  document.getElementById('latPred').textContent = isPred ? `${ms}ms` : '—';
+  document.getElementById('latPredBar').style.width = isPred ? `${ms/550*100}%` : '2%';
+  document.getElementById('latPredBar').style.background = isPred ? '#00ff8880' : '#7b61ff40';
+}
+
+function updateStats() {
+  const t = TURNS_DATA[st.currentTurn];
+  document.getElementById('stTurn').textContent   = t ? `T${t.id+1}: ${t.taskType}` : '—';
+  document.getElementById('stPat').textContent    = st.activePatIds.length ? st.activePatIds.join(',') : '—';
+  document.getElementById('stStaged').textContent = st.stagedBuffers.filter(b=>b.status==='staging').length;
+  document.getElementById('stHit').textContent    = st.hitCount;
+  document.getElementById('stMiss').textContent   = st.missCount;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP RUNNER
+// ─────────────────────────────────────────────────────────────────────────────
+let busy = false;
+function runStep() {
+  if (busy || stepIdx >= allSteps.length) {
+    if (stepIdx >= allSteps.length) {
+      st.animating = false;
+      document.getElementById('runBtn').textContent = '▶ Run';
+      document.getElementById('runBtn').classList.remove('paused');
+    }
+    return;
+  }
+  busy = true;
+  const step = allSteps[stepIdx++];
+  step.action();
+  const delay = 1100 / st.speed;
+  setTimeout(() => {
+    busy = false;
+    if (st.animating) setTimeout(runStep, 200/st.speed);
+  }, delay);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESET
+// ─────────────────────────────────────────────────────────────────────────────
+function resetAll() {
+  st.animating = false; busy = false; stepIdx = 0;
+  st.currentTurn = -1; st.stagedBuffers = []; st.hitMiss = null;
+  st.latency = null; st.brainGlow = 0; st.particles = [];
+  st.pulseRings = []; st.hitCount = 0; st.missCount = 0;
+  st.activePatIds = []; st.patternProbs = { P1:0.89, P2:0.82, P3:0.74, P4:0.61, P5:0.78 };
+  if (autoTimer) clearTimeout(autoTimer);
+  document.getElementById('runBtn').textContent = '▶ Run';
+  document.getElementById('runBtn').classList.remove('paused');
+  document.getElementById('predLog').innerHTML = '';
+  document.getElementById('latPred').textContent = '—';
+  document.getElementById('latPredBar').style.width = '2%';
+  document.querySelectorAll('.tl-turn').forEach((b,i) => { b.classList.remove('active','past'); if(i===0)b.classList.add('active'); });
+  renderPatList(); renderBufList(); updateStats();
+  allSteps = buildSteps();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTS
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', function() {
+  if (st.animating) {
+    st.animating = false;
+    this.textContent = '▶ Resume';
+    this.classList.remove('paused'); return;
+  }
+  if (stepIdx >= allSteps.length) resetAll();
+  st.animating = true;
+  this.textContent = '⏸ Pause';
+  this.classList.add('paused');
+  runStep();
+});
+
+document.getElementById('stepBtn').addEventListener('click', function() {
+  st.animating = false;
+  document.getElementById('runBtn').textContent = '▶ Resume';
+  document.getElementById('runBtn').classList.remove('paused');
+  if (!busy && stepIdx < allSteps.length) runStep();
+});
+
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+document.getElementById('spd').addEventListener('input', function() {
+  st.speed = parseFloat(this.value);
+});
+
+document.querySelectorAll('.tl-turn').forEach((btn, i) => {
+  btn.addEventListener('click', () => {
+    // jump to turn start in steps
+    resetAll();
+    // fast forward to turn i
+    let target = 0;
+    for (let j = 0; j < allSteps.length; j++) {
+      if (allSteps[j].tIdx === i) { target = j; break; }
+    }
+    stepIdx = target; st.currentTurn = i; setTurnActive(i); updateStats();
+  });
+});
+
+// Init
+resetAll();
+</script>
+
+</body>
+</html>
