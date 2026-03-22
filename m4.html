@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mechanism 4 — Working Memory Binding</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700;800&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #050810;
+  --bg2:      #090d18;
+  --bg3:      #0d1220;
+  --panel:    #070b15;
+  --border:   #141f35;
+  --pfc:      #e040fb;
+  --active:   #00e5ff;
+  --evict:    #ff5252;
+  --defer:    #ffab40;
+  --new:      #69ff47;
+  --kept:     #40c4ff;
+  --budget:   #e040fb;
+  --text:     #cfe0ff;
+  --muted:    #3a5070;
+  --dim:      #0f1825;
+}
+
+- { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘Exo 2’, sans-serif;
+min-height: 100vh;
+overflow-x: hidden;
+}
+
+/* Animated circuit lines background */
+#circuit-bg {
+position: fixed; inset: 0;
+pointer-events: none; z-index: 0;
+}
+
+.wrapper {
+position: relative; z-index: 1;
+max-width: 1300px; margin: 0 auto;
+padding: 24px 20px;
+}
+
+/* ── Header ── */
+header {
+display: flex; align-items: flex-start;
+justify-content: space-between; gap: 16px; flex-wrap: wrap;
+margin-bottom: 22px; padding-bottom: 18px;
+border-bottom: 1px solid var(–border);
+}
+.hdr-left .eyebrow {
+font-family: ‘Share Tech Mono’, monospace;
+font-size: 10px; color: var(–pfc);
+letter-spacing: 3px; text-transform: uppercase; margin-bottom: 4px;
+}
+.hdr-left h1 {
+font-family: ‘Exo 2’, sans-serif;
+font-size: clamp(22px, 4vw, 40px);
+font-weight: 800; letter-spacing: -0.5px;
+color: var(–text);
+}
+.hdr-left h1 em { color: var(–pfc); font-style: normal; }
+.hdr-left p {
+font-family: ‘Share Tech Mono’, monospace;
+font-size: 10px; color: var(–muted);
+margin-top: 5px; letter-spacing: 1.5px;
+}
+.hdr-tags { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; margin-top: 4px; }
+.htag {
+padding: 4px 10px; border-radius: 3px;
+font-family: ‘Share Tech Mono’, monospace;
+font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600;
+}
+.htag-pfc  { background:#e040fb12; color:var(–pfc);   border:1px solid #e040fb25; }
+.htag-new  { background:#69ff4712; color:var(–new);   border:1px solid #69ff4725; }
+.htag-ev   { background:#ff525212; color:var(–evict); border:1px solid #ff525225; }
+.htag-df   { background:#ffab4012; color:var(–defer); border:1px solid #ffab4025; }
+
+/* ── Turn selector ── */
+.turn-row {
+display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.turn-btn {
+padding: 7px 18px; border-radius: 5px;
+font-family: ‘Share Tech Mono’, monospace;
+font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+border: 1px solid var(–border); background: var(–bg2);
+color: var(–muted); cursor: pointer; transition: all .2s;
+}
+.turn-btn:hover { border-color: var(–pfc); color: var(–pfc); }
+.turn-btn.active {
+background: #e040fb18; border-color: var(–pfc); color: var(–pfc);
+box-shadow: 0 0 14px #e040fb25;
+}
+
+/* ── Main grid ── */
+.main {
+display: grid;
+grid-template-columns: 1fr 340px;
+gap: 16px; align-items: start;
+}
+@media(max-width:920px) { .main { grid-template-columns: 1fr; } }
+
+/* ── Stage ── */
+.stage {
+background: var(–bg2);
+border: 1px solid var(–border);
+border-radius: 10px; overflow: hidden;
+}
+canvas { display: block; width: 100%; }
+
+/* Controls */
+.ctrl {
+display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+padding: 11px 14px; border-top: 1px solid var(–border);
+background: var(–panel);
+}
+.btn {
+padding: 7px 16px; border-radius: 4px; border: none;
+font-family: ‘Share Tech Mono’, monospace;
+font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+cursor: pointer; transition: all .2s; font-weight: 700;
+}
+.btn-run   { background: var(–pfc); color: #050810; }
+.btn-run:hover   { box-shadow: 0 0 20px #e040fb50; transform: translateY(-1px); }
+.btn-run.paused  { background: var(–defer); color: #050810; }
+.btn-step  { background: transparent; color: var(–muted); border: 1px solid var(–border); }
+.btn-step:hover  { border-color: var(–active); color: var(–active); }
+.btn-reset { background: transparent; color: var(–muted); border: 1px solid var(–border); }
+.btn-reset:hover { border-color: var(–evict); color: var(–evict); }
+.btn:disabled { opacity:.3; cursor:not-allowed; transform:none!important; box-shadow:none!important; }
+.sp-ctrl { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sp-lbl  { font-family: ‘Share Tech Mono’, monospace; font-size: 9px; color: var(–muted); }
+input[type=range] { width: 72px; accent-color: var(–pfc); }
+
+/* Status bar */
+.sbar {
+padding: 7px 14px; border-top: 1px solid var(–border);
+background: var(–panel);
+display: flex; gap: 18px; flex-wrap: wrap;
+font-family: ‘Share Tech Mono’, monospace; font-size: 9px; color: var(–muted);
+}
+.stt em { font-style: normal; font-weight: 700; }
+.stt-p em { color: var(–pfc); }
+.stt-n em { color: var(–new); }
+.stt-e em { color: var(–evict); }
+.stt-d em { color: var(–defer); }
+.stt-t em { color: var(–active); }
+
+/* ── Side panel ── */
+.side { display: flex; flex-direction: column; gap: 14px; }
+.card {
+background: var(–bg2); border: 1px solid var(–border);
+border-radius: 10px; overflow: hidden;
+}
+.card-hd {
+padding: 8px 14px; border-bottom: 1px solid var(–border);
+background: var(–panel);
+font-family: ‘Share Tech Mono’, monospace; font-size: 9px;
+font-weight: 700; color: var(–muted); text-transform: uppercase; letter-spacing: 2px;
+}
+.card-bd { padding: 12px 14px; }
+
+/* Working memory slots */
+.wm-slots { display: flex; flex-direction: column; gap: 6px; }
+.wm-slot {
+padding: 8px 10px; border-radius: 5px;
+font-family: ‘Share Tech Mono’, monospace; font-size: 9px;
+border: 1px solid var(–dim); background: var(–bg3);
+display: flex; justify-content: space-between; align-items: center;
+transition: all .4s;
+min-height: 34px;
+}
+.wm-slot.filled-new  { border-color: var(–new);   background: #69ff4710; }
+.wm-slot.filled-kept { border-color: var(–kept);  background: #40c4ff10; }
+.wm-slot.filled-evict{ border-color: var(–evict); background: #ff525210; opacity:.5; }
+.wm-slot.empty       { border-style: dashed; opacity: .35; }
+.wm-name { color: var(–text); }
+.wm-score { font-weight: 700; }
+.wm-score.new  { color: var(–new); }
+.wm-score.kept { color: var(–kept); }
+.wm-score.evict{ color: var(–evict); }
+
+/* Event log */
+.ev-log {
+max-height: 180px; overflow-y: auto;
+font-family: ‘Share Tech Mono’, monospace; font-size: 9px;
+}
+.ev-log::-webkit-scrollbar { width: 3px; }
+.ev-log::-webkit-scrollbar-thumb { background: var(–border); }
+.ev-entry {
+padding: 4px 0; border-bottom: 1px solid var(–dim);
+display: flex; justify-content: space-between; align-items: center;
+animation: entryIn .25s ease;
+}
+.ev-entry:last-child { border-bottom: none; }
+@keyframes entryIn { from { opacity:0; transform: translateX(-5px); } to { opacity:1; transform:none; } }
+.ev-label { color: var(–text); }
+.ev-tag {
+padding: 1px 6px; border-radius: 2px; font-size: 8px; font-weight: 700;
+}
+.ev-tag.enter  { background:#69ff4720; color:var(–new);   border:1px solid #69ff4740; }
+.ev-tag.keep   { background:#40c4ff20; color:var(–kept);  border:1px solid #40c4ff40; }
+.ev-tag.evict  { background:#ff525220; color:var(–evict); border:1px solid #ff525240; }
+.ev-tag.defer  { background:#ffab4020; color:var(–defer); border:1px solid #ffab4040; }
+
+/* Concept */
+.concept {
+font-size: 12px; line-height: 1.8; color: var(–text);
+font-family: ‘Share Tech Mono’, monospace;
+}
+.concept .cp  { color: var(–pfc); font-weight: 700; }
+.concept .ca  { color: var(–active); font-weight: 700; }
+.concept .cn  { color: var(–new); font-weight: 700; }
+.concept .ce  { color: var(–evict); font-weight: 700; }
+.concept .cd  { color: var(–defer); font-weight: 700; }
+
+/* Formula */
+.fml {
+background: var(–bg3); border: 1px solid var(–border);
+border-radius: 6px; padding: 10px 12px;
+font-family: ‘Share Tech Mono’, monospace; font-size: 10px;
+line-height: 2; color: var(–text);
+}
+.fml .f1 { color: var(–pfc); font-weight: 700; }
+.fml .f2 { color: var(–active); font-weight: 700; }
+.fml .f3 { color: var(–evict); font-weight: 700; }
+.fml .f4 { color: var(–defer); font-weight: 700; }
+.fml .f5 { color: var(–new); font-weight: 700; }
+</style>
+
+</head>
+<body>
+
+<canvas id="circuit-bg"></canvas>
+
+<div class="wrapper">
+  <header>
+    <div class="hdr-left">
+      <div class="eyebrow">Context Engine · Sunday Session · Mechanism 04</div>
+      <h1>Working Memory <em>Binding</em></h1>
+      <p>PREFRONTAL CORTEX ANALOG · TOKEN BUDGET ENFORCEMENT · DYNAMIC EVICTION</p>
+    </div>
+    <div>
+      <div class="hdr-tags">
+        <div class="htag htag-pfc">PFC Analog</div>
+        <div class="htag htag-new">Enter</div>
+        <div class="htag htag-ev">Evict</div>
+        <div class="htag htag-df">Defer</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Turn selector -->
+
+  <div class="turn-row">
+    <button class="turn-btn active" data-turn="1">Turn 1 · Session Opens</button>
+    <button class="turn-btn" data-turn="2">Turn 2 · Stripe Signal</button>
+    <button class="turn-btn" data-turn="3">Turn 3 · Compliance</button>
+  </div>
+
+  <div class="main">
+    <div>
+      <div class="stage">
+        <canvas id="main"></canvas>
+        <div class="ctrl">
+          <button class="btn btn-run"   id="runBtn">▶ Run</button>
+          <button class="btn btn-step"  id="stepBtn">Step</button>
+          <button class="btn btn-reset" id="resetBtn">↺ Reset</button>
+          <div class="sp-ctrl">
+            <span class="sp-lbl">Speed</span>
+            <input type="range" id="spd" min="0.4" max="3" step="0.2" value="1">
+          </div>
+        </div>
+        <div class="sbar">
+          <div class="stt stt-p">Turn: <em id="stTurn">—</em></div>
+          <div class="stt stt-t">Tokens: <em id="stTokens">0 / 1000</em></div>
+          <div class="stt stt-n">Entered: <em id="stEnter">0</em></div>
+          <div class="stt stt-e">Evicted: <em id="stEvict">0</em></div>
+          <div class="stt stt-d">Deferred: <em id="stDefer">0</em></div>
+        </div>
+      </div>
+    </div>
+
+```
+<div class="side">
+
+  <div class="card">
+    <div class="card-hd">What Is Working Memory Binding?</div>
+    <div class="card-bd">
+      <div class="concept">
+        The <span class="cp">prefrontal cortex</span> holds ~4 chunks in active memory at once.<br><br>
+        The engine enforces a <span class="ca">token budget</span>. Each turn, nodes are <span class="cn">entered</span>, <span class="ce">evicted</span> (lowest value-density first), or <span class="cd">deferred</span> (staged for later).<br><br>
+        Value density = <span class="ca">Activation ÷ Token Cost</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Working Memory — Live Slots</div>
+    <div class="card-bd" style="padding:8px 10px;">
+      <div class="wm-slots" id="wmSlots"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Eviction Formula</div>
+    <div class="card-bd">
+      <div class="fml">
+        <span class="f1">Value Density</span> =<br>
+        &nbsp;&nbsp;<span class="f2">Activation</span> ÷ <span class="f2">Token Cost</span><br><br>
+        Evict: <span class="f3">lowest density</span> first<br>
+        Defer: fits density but <span class="f4">budget full</span><br>
+        Budget: <span class="f5" id="fBudget">1000</span> tokens
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Event Log</div>
+    <div class="card-bd" style="padding:0;">
+      <div class="ev-log" id="evLog" style="padding:8px 12px;"></div>
+    </div>
+  </div>
+
+</div>
+```
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// CIRCUIT BACKGROUND
+// ─────────────────────────────────────────────────────────────────────────────
+(function() {
+  const c = document.getElementById('circuit-bg');
+  const cx = c.getContext('2d');
+  let lines = [];
+  function init() {
+    c.width = window.innerWidth; c.height = window.innerHeight;
+    lines = [];
+    for (let i = 0; i < 18; i++) {
+      const horiz = Math.random() > 0.5;
+      lines.push({
+        x: Math.random()*c.width, y: Math.random()*c.height,
+        len: 60 + Math.random()*180,
+        horiz, alpha: 0.04 + Math.random()*0.06,
+        speed: 0.2 + Math.random()*0.5,
+        t: Math.random(),
+      });
+    }
+  }
+  function draw() {
+    cx.clearRect(0,0,c.width,c.height);
+    lines.forEach(l => {
+      l.t += l.speed * 0.002;
+      if (l.t > 1) { l.t = 0; l.x = Math.random()*c.width; l.y = Math.random()*c.height; }
+      cx.strokeStyle = `rgba(224,64,251,${l.alpha})`;
+      cx.lineWidth = 1;
+      cx.beginPath();
+      if (l.horiz) {
+        cx.moveTo(l.x, l.y);
+        cx.lineTo(l.x + l.len * l.t, l.y);
+      } else {
+        cx.moveTo(l.x, l.y);
+        cx.lineTo(l.x, l.y + l.len * l.t);
+      }
+      cx.stroke();
+      // dot at head
+      cx.fillStyle = `rgba(224,64,251,${l.alpha*3})`;
+      cx.beginPath();
+      if (l.horiz) cx.arc(l.x + l.len*l.t, l.y, 2, 0, Math.PI*2);
+      else cx.arc(l.x, l.y + l.len*l.t, 2, 0, Math.PI*2);
+      cx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  init(); draw(); window.addEventListener('resize', init);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA — three turns of the payment bug session
+// ─────────────────────────────────────────────────────────────────────────────
+const TOKEN_BUDGET = 1000;
+
+const TURNS = [
+  {
+    id: 1, label: 'Session Opens',
+    tso: 'task: bug_investigation · domain: payment',
+    incoming: [
+      { id:'CB',   label:'ConcurrencyBug',      act:0.778, tokens:120 },
+      { id:'DC',   label:'DuplicateCharge',      act:0.718, tokens:95  },
+      { id:'IP',   label:'IdempotencyPattern',   act:0.677, tokens:200 },
+      { id:'P8',   label:'PEP8StyleGuide',       act:0.634, tokens:310 },
+      { id:'RP',   label:'RefundPolicy',         act:0.516, tokens:180 },
+    ],
+    evict: [], defer: [],
+  },
+  {
+    id: 2, label: 'Stripe Gateway Found',
+    tso: 'new_finding: bug only via Stripe · entity: StripeWebhookHandler',
+    incoming: [
+      { id:'SW',   label:'StripeWebhookHandler', act:0.881, tokens:230 },
+      { id:'WR',   label:'WebhookRetryLogic',    act:0.790, tokens:180 },
+      { id:'SV',   label:'StripeSignatureVerify',act:0.710, tokens:160 },
+    ],
+    evict: ['P8','RP'],
+    defer: [],
+  },
+  {
+    id: 3, label: 'Compliance Dimension',
+    tso: 'new_finding: stored card data · entity: PCIDSSComplianceRule',
+    incoming: [
+      { id:'PC',   label:'PCIDSSComplianceRule', act:0.850, tokens:290 },
+      { id:'CE',   label:'CardDataEncryption',   act:0.810, tokens:240 },
+    ],
+    evict: ['IP'],
+    defer: [{ id:'AL', label:'AuditLogRequirement', act:0.760, tokens:195 }],
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CANVAS
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('main');
+const ctx    = canvas.getContext('2d');
+let W, H;
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  W = r.width; H = 560; canvas.width = W; canvas.height = H;
+  canvas.style.height = H + 'px';
+}
+resize(); window.addEventListener('resize', () => { resize(); });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LAYOUT
+// ─────────────────────────────────────────────────────────────────────────────
+// Visual zones from left to right:
+//  [INCOMING QUEUE] → [PFC BUFFER] → [WORKING MEMORY] + [DEFERRED QUEUE]
+function L() {
+  const pad = 24;
+  return {
+    inX:    W * 0.14,
+    pfcX:   W * 0.42,
+    pfcY:   H * 0.50,
+    pfcR:   46,
+    wmX:    W * 0.70,
+    wmTop:  70,
+    wmSlotH:52,
+    wmW:    W * 0.22,
+    defX:   W * 0.92,
+    rowH:   52,
+    startY: 90,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let wmContents = [];   // { node, status: 'new'|'kept'|'evict' }
+let deferQueue = [];
+let totalTokens = 0;
+let enterCount = 0, evictCount = 0, deferCount = 0;
+let currentTurn = 0;  // 0-based
+
+// Animation particles
+let particles = [];    // { x,y,tx,ty,t,color,label,type }
+let pfcGlow = 0, pfcGlowColor = '#e040fb';
+let wmFlash = {}; // nodeId → { t, color }
+let speed = 1;
+let animating = false, busy = false;
+let stepQueue = [];
+let autoTimer = null;
+let rafId;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NODE UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+function valueDensity(node) { return node.act / node.tokens; }
+
+function nodeColor(node, status) {
+  if (status === 'evict') return '#ff5252';
+  if (status === 'new')   return '#69ff47';
+  if (status === 'kept')  return '#40c4ff';
+  return '#00e5ff';
+}
+
+function incomingSlotY(idx) {
+  const l = L();
+  return l.startY + idx * l.rowH;
+}
+
+function wmSlotY(idx) {
+  const l = L();
+  return l.wmTop + idx * l.wmSlotH + l.wmSlotH / 2;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+function drawNodeCard(x, y, node, color, alpha = 1, scale = 1, status = '') {
+  const pw = 140 * scale, ph = 40 * scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.shadowColor = color; ctx.shadowBlur = 10 * scale;
+  ctx.fillStyle = '#050810';
+  ctx.strokeStyle = color; ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath(); ctx.roundRect(-pw/2, -ph/2, pw, ph, 5*scale);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // activation bar
+  ctx.globalAlpha = alpha * 0.22;
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.roundRect(-pw/2+3, -ph/2+3, (pw-6)*node.act, ph-6, 3*scale);
+  ctx.fill();
+  ctx.globalAlpha = alpha;
+
+  // label
+  ctx.font = `bold ${Math.round(9.5*scale)}px 'Share Tech Mono'`;
+  ctx.textAlign = 'center'; ctx.fillStyle = '#cfe0ff';
+  ctx.fillText(node.label.length > 17 ? node.label.slice(0,16)+'…' : node.label, 0, -3*scale);
+
+  // metrics row
+  ctx.font = `${Math.round(8.5*scale)}px 'Share Tech Mono'`;
+  ctx.fillStyle = color;
+  const vd = valueDensity(node).toFixed(4);
+  ctx.fillText(`A:${node.act.toFixed(3)} | ${node.tokens}t | D:${vd}`, 0, 10*scale);
+
+  ctx.restore();
+}
+
+function drawPFC(l, now) {
+  const { pfcX: px, pfcY: py, pfcR: pr } = l;
+  ctx.save();
+
+  // orbit rings
+  for (let i = 0; i < 4; i++) {
+    const t = ((now / (1800 + i*500)) % 1);
+    const r = pr + 16 + i * 14;
+    ctx.globalAlpha = 0.08 + i*0.02;
+    ctx.strokeStyle = '#e040fb'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.stroke();
+    const ang = t * Math.PI*2 - i*Math.PI/2;
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = '#e040fb';
+    ctx.beginPath(); ctx.arc(px+Math.cos(ang)*r, py+Math.sin(ang)*r, 2.5, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // glow flash
+  if (pfcGlow > 0) {
+    ctx.globalAlpha = Math.min(1, pfcGlow) * 0.5;
+    ctx.shadowColor = pfcGlowColor; ctx.shadowBlur = 50;
+    ctx.fillStyle = pfcGlowColor;
+    ctx.beginPath(); ctx.arc(px, py, pr+18, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0; pfcGlow -= 0.025;
+    if (pfcGlow < 0) pfcGlow = 0;
+  }
+  ctx.globalAlpha = 1;
+
+  // body
+  const g = ctx.createRadialGradient(px, py-6, 0, px, py, pr);
+  g.addColorStop(0, '#1a052a'); g.addColorStop(1, '#090514');
+  ctx.fillStyle = g; ctx.strokeStyle = '#e040fb'; ctx.lineWidth = 2;
+  ctx.shadowColor = '#e040fb'; ctx.shadowBlur = 22;
+  ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+
+  // inner lattice
+  ctx.strokeStyle = '#e040fb30'; ctx.lineWidth = 0.8;
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI/3;
+    ctx.beginPath(); ctx.moveTo(px, py);
+    ctx.lineTo(px + Math.cos(a)*pr*0.8, py + Math.sin(a)*pr*0.8); ctx.stroke();
+  }
+
+  // label
+  ctx.font = "bold 10px 'Exo 2'";
+  ctx.textAlign = 'center'; ctx.fillStyle = '#e040fb';
+  ctx.fillText('PFC', px, py + 4);
+  ctx.font = "8px 'Share Tech Mono'";
+  ctx.fillStyle = '#3a5070';
+  ctx.fillText('PREFRONTAL', px, py + pr + 14);
+  ctx.fillText('CORTEX', px, py + pr + 24);
+
+  ctx.restore();
+}
+
+function drawWMBox(l) {
+  const { wmX: wx, wmTop: wt, wmW: ww, wmSlotH: sh } = l;
+  const totalH = Math.max(5, wmContents.length) * sh + 60;
+
+  ctx.save();
+
+  // Budget bar (top of WM box)
+  const budgetPct = Math.min(1, totalTokens / TOKEN_BUDGET);
+  const budgetColor = budgetPct > 0.92 ? '#ff5252' : budgetPct > 0.75 ? '#ffab40' : '#e040fb';
+  const barW = ww;
+
+  // WM container
+  ctx.shadowColor = '#e040fb';
+  ctx.shadowBlur = budgetPct > 0.9 ? 20 : 8;
+  ctx.fillStyle = '#08091a';
+  ctx.strokeStyle = budgetColor; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(wx - ww/2, wt - 28, ww, totalH, 8);
+  ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+
+  // Header
+  ctx.font = "bold 9px 'Share Tech Mono'";
+  ctx.textAlign = 'center'; ctx.fillStyle = budgetColor;
+  ctx.fillText('WORKING MEMORY', wx, wt - 12);
+
+  // Budget bar track
+  ctx.fillStyle = '#0d1225';
+  ctx.beginPath(); ctx.roundRect(wx - ww/2 + 6, wt - 6, ww - 12, 8, 3); ctx.fill();
+  // Budget bar fill
+  const grad = ctx.createLinearGradient(wx - ww/2 + 6, 0, wx - ww/2 + 6 + (ww-12)*budgetPct, 0);
+  grad.addColorStop(0, budgetColor+'60'); grad.addColorStop(1, budgetColor);
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.roundRect(wx - ww/2 + 6, wt - 6, (ww-12)*budgetPct, 8, 3); ctx.fill();
+  ctx.font = "7px 'Share Tech Mono'";
+  ctx.fillStyle = budgetColor;
+  ctx.fillText(`${totalTokens} / ${TOKEN_BUDGET}t`, wx, wt + 6);
+
+  // Node slots
+  wmContents.forEach((item, i) => {
+    const sy = wt + 16 + i * sh;
+    const col = nodeColor(item.node, item.status);
+    const flash = wmFlash[item.node.id];
+    let flashAlpha = 0;
+    if (flash) { flashAlpha = Math.max(0, flash.t); flash.t -= 0.04; }
+
+    if (flashAlpha > 0) {
+      ctx.globalAlpha = flashAlpha * 0.35;
+      ctx.fillStyle = flash.color;
+      ctx.beginPath(); ctx.roundRect(wx - ww/2 + 4, sy, ww - 8, sh - 6, 5); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    const alpha = item.status === 'evict' ? 0.3 : 1;
+    drawNodeCard(wx, sy + (sh-6)/2, item.node, col, alpha, 0.88, item.status);
+
+    // status tag
+    ctx.save();
+    ctx.font = "bold 7px 'Share Tech Mono'";
+    ctx.textAlign = 'right'; ctx.globalAlpha = alpha;
+    ctx.fillStyle = col;
+    const tag = item.status === 'new' ? '▲ NEW' : item.status === 'evict' ? '▼ EVICT' : '● KEPT';
+    ctx.fillText(tag, wx + ww/2 - 8, sy + (sh-6)/2 + 4);
+    ctx.restore();
+  });
+
+  ctx.restore();
+}
+
+function drawDeferBox(l) {
+  if (deferQueue.length === 0) return;
+  const dx = l.defX, dy = H * 0.68;
+  const bw = 130, bh = deferQueue.length * 44 + 30;
+
+  ctx.save();
+  ctx.shadowColor = '#ffab40'; ctx.shadowBlur = 10;
+  ctx.fillStyle = '#0f0b04';
+  ctx.strokeStyle = '#ffab4060'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(dx - bw/2, dy - 20, bw, bh, 6);
+  ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+
+  ctx.font = "bold 8px 'Share Tech Mono'";
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffab40';
+  ctx.fillText('DEFERRED', dx, dy - 6);
+
+  deferQueue.forEach((node, i) => {
+    const ny = dy + 14 + i * 44;
+    drawNodeCard(dx, ny, node, '#ffab40', 0.8, 0.78);
+  });
+  ctx.restore();
+}
+
+function drawParticles() {
+  particles = particles.filter(p => p.t < 1);
+  particles.forEach(p => {
+    const x = p.x + (p.tx - p.x) * p.t;
+    const y = p.y + (p.ty - p.y) * p.t + Math.sin(p.t*Math.PI)*-40;
+    // trail
+    for (let i=1;i<=4;i++) {
+      const tt = Math.max(0, p.t - i*0.06);
+      const tx2 = p.x + (p.tx-p.x)*tt;
+      const ty2 = p.y + (p.ty-p.y)*tt + Math.sin(tt*Math.PI)*-40;
+      ctx.save(); ctx.globalAlpha = 0.12-i*0.025;
+      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 6;
+      ctx.beginPath(); ctx.arc(tx2, ty2, 4-i, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    }
+    ctx.save(); ctx.globalAlpha = 0.9;
+    ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    p.t += 0.016 * speed;
+  });
+}
+
+function drawChannelLines(l) {
+  ctx.save();
+  // Incoming → PFC
+  const grad1 = ctx.createLinearGradient(l.inX+72, l.pfcY, l.pfcX-l.pfcR, l.pfcY);
+  grad1.addColorStop(0, '#3a507040'); grad1.addColorStop(1, '#e040fb40');
+  ctx.strokeStyle = grad1; ctx.lineWidth = 1; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(l.inX+72, l.pfcY); ctx.lineTo(l.pfcX-l.pfcR-8, l.pfcY);
+  ctx.stroke();
+
+  // PFC → WM
+  const grad2 = ctx.createLinearGradient(l.pfcX+l.pfcR, l.pfcY, l.wmX-l.wmW/2, l.pfcY);
+  grad2.addColorStop(0, '#e040fb40'); grad2.addColorStop(1, '#40c4ff40');
+  ctx.strokeStyle = grad2; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(l.pfcX+l.pfcR+8, l.pfcY); ctx.lineTo(l.wmX-l.wmW/2, l.pfcY);
+  ctx.stroke();
+
+  ctx.setLineDash([]); ctx.restore();
+}
+
+function drawTSOBox(l, turn) {
+  if (!turn) return;
+  const bx = l.inX - 75, by = 14, bw = 150, bh = 40;
+  ctx.save();
+  ctx.fillStyle = '#0a0d18'; ctx.strokeStyle = '#e040fb30'; ctx.lineWidth = 1;
+  ctx.shadowColor = '#e040fb'; ctx.shadowBlur = 6;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.font = "bold 8px 'Share Tech Mono'"; ctx.textAlign = 'left'; ctx.fillStyle = '#e040fb';
+  ctx.fillText('TSO T'+turn.id, bx+8, by+14);
+  ctx.font = "7px 'Share Tech Mono'"; ctx.fillStyle = '#3a5070';
+  const txt = turn.tso; const max = 28;
+  ctx.fillText(txt.slice(0,max), bx+8, by+26);
+  if (txt.length > max) ctx.fillText(txt.slice(max,max+max)+'…', bx+8, by+37);
+  ctx.restore();
+}
+
+function drawColLabels(l) {
+  const labels = [
+    { x: l.inX,  text: 'INCOMING',    color: '#3a5070' },
+    { x: l.pfcX, text: 'PFC GATE',    color: '#e040fb50' },
+    { x: l.wmX,  text: 'WORKING MEM', color: '#40c4ff50' },
+  ];
+  labels.forEach(lb => {
+    ctx.save();
+    ctx.font = "bold 8px 'Share Tech Mono'"; ctx.textAlign = 'center';
+    ctx.fillStyle = lb.color;
+    ctx.fillText(lb.text, lb.x, 62);
+    ctx.globalAlpha = 0.05; ctx.strokeStyle = lb.color; ctx.lineWidth = 1;
+    ctx.setLineDash([3,6]);
+    ctx.beginPath(); ctx.moveTo(lb.x, 68); ctx.lineTo(lb.x, H-20); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INCOMING NODE DISPLAY
+// ─────────────────────────────────────────────────────────────────────────────
+let visibleIncoming = []; // { node, alpha, animT }
+
+function drawIncoming(l) {
+  // Column header
+  const turn = TURNS[currentTurn];
+  if (!turn) return;
+
+  visibleIncoming.forEach((item, i) => {
+    const iy = incomingSlotY(i);
+    if (item.animT < 1) item.animT = Math.min(1, item.animT + 0.04 * speed);
+    const alpha = item.animT;
+    const col = item.evicting ? '#ff5252' : '#00e5ff';
+    drawNodeCard(l.inX, iy, item.node, col, alpha, 0.88);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN RENDER LOOP
+// ─────────────────────────────────────────────────────────────────────────────
+function render(now = 0) {
+  ctx.clearRect(0,0,W,H);
+  const l = L();
+
+  // bg
+  const bg = ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#050810'); bg.addColorStop(1,'#090d18');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+
+  // dot grid
+  ctx.fillStyle = '#141f35';
+  for (let gx=20;gx<W;gx+=42) for (let gy=20;gy<H;gy+=42) {
+    ctx.beginPath(); ctx.arc(gx,gy,.8,0,Math.PI*2); ctx.fill();
+  }
+
+  drawColLabels(l);
+  drawTSOBox(l, TURNS[currentTurn]);
+  drawChannelLines(l);
+  drawPFC(l, now);
+  drawIncoming(l);
+  drawWMBox(l);
+  drawDeferBox(l);
+  drawParticles();
+
+  rafId = requestAnimationFrame(render);
+}
+rafId = requestAnimationFrame(render);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP LOGIC
+// ─────────────────────────────────────────────────────────────────────────────
+function buildTurnSteps(turnIdx) {
+  const turn = TURNS[turnIdx];
+  const steps = [];
+
+  // 1. Show incoming nodes
+  steps.push({
+    label: `Turn ${turn.id}: Incoming Signals`,
+    action() {
+      visibleIncoming = turn.incoming.map(n => ({ node: n, animT: 0, evicting: false }));
+      pfcGlow = 1.2; pfcGlowColor = '#00e5ff';
+      updateStatus();
+    }
+  });
+
+  // 2. Evaluate evictions first
+  if (turn.evict.length > 0) {
+    turn.evict.forEach(evId => {
+      steps.push({
+        label: `Evict: ${evId} (lowest value-density)`,
+        action() {
+          const idx = wmContents.findIndex(c => c.node.id === evId);
+          if (idx !== -1) {
+            wmContents[idx].status = 'evict';
+            wmFlash[evId] = { t: 1.5, color: '#ff5252' };
+            pfcGlow = 1; pfcGlowColor = '#ff5252';
+            logEvent(wmContents[idx].node.label, 'evict');
+            evictCount++;
+            totalTokens -= wmContents[idx].node.tokens;
+            setTimeout(() => {
+              wmContents = wmContents.filter(c => c.node.id !== evId);
+              updateSidePanel();
+              updateStatus();
+            }, 500 / speed);
+          }
+          updateStatus();
+        }
+      });
+    });
+  }
+
+  // 3. Enter new nodes
+  turn.incoming.forEach(node => {
+    steps.push({
+      label: `Enter: ${node.label}`,
+      action() {
+        const newTotal = totalTokens + node.tokens;
+        if (newTotal <= TOKEN_BUDGET) {
+          // animate: incoming → PFC → WM
+          const l = L();
+          const fromY = incomingSlotY(turn.incoming.indexOf(node));
+          // pulse to PFC
+          particles.push({ x: l.inX+72, y: fromY, tx: l.pfcX, ty: l.pfcY, t:0, color:'#00e5ff' });
+          pfcGlow = 0.8; pfcGlowColor = '#69ff47';
+          setTimeout(() => {
+            // pulse PFC → WM
+            particles.push({ x: l.pfcX, y: l.pfcY, tx: l.wmX, ty: wmSlotY(wmContents.length), t:0, color:'#69ff47' });
+            wmContents.push({ node, status: 'new' });
+            wmFlash[node.id] = { t: 1.8, color: '#69ff47' };
+            totalTokens += node.tokens;
+            enterCount++;
+            logEvent(node.label, 'enter');
+            updateSidePanel();
+            updateStatus();
+          }, 500 / speed);
+        }
+        updateStatus();
+      }
+    });
+  });
+
+  // 4. Mark previous entries as 'kept'
+  steps.push({
+    label: 'Mark kept nodes',
+    action() {
+      wmContents.forEach(c => { if (c.status === 'new') c.status = 'kept'; });
+      updateSidePanel();
+      updateStatus();
+    }
+  });
+
+  // 5. Handle deferred
+  if (turn.defer && turn.defer.length > 0) {
+    turn.defer.forEach(node => {
+      steps.push({
+        label: `Defer: ${node.label} (budget full)`,
+        action() {
+          deferQueue.push(node);
+          deferCount++;
+          logEvent(node.label, 'defer');
+          updateStatus();
+        }
+      });
+    });
+  }
+
+  return steps;
+}
+
+let allSteps = [];
+let stepIdx = 0;
+
+function initSteps() {
+  allSteps = [];
+  for (let t = 0; t < TURNS.length; t++) {
+    // turn separator step
+    allSteps.push({
+      label: `--- Turn ${TURNS[t].id}: ${TURNS[t].label} ---`,
+      isSeparator: true, turnIdx: t,
+      action() {
+        currentTurn = this.turnIdx;
+        document.querySelectorAll('.turn-btn').forEach((b,i) => b.classList.toggle('active', i === this.turnIdx));
+        updateStatus();
+      }
+    });
+    allSteps.push(...buildTurnSteps(t));
+  }
+}
+
+function runStep() {
+  if (busy || stepIdx >= allSteps.length) {
+    if (stepIdx >= allSteps.length) {
+      animating = false;
+      document.getElementById('runBtn').textContent = '▶ Run';
+      document.getElementById('runBtn').classList.remove('paused');
+    }
+    return;
+  }
+  busy = true;
+  const step = allSteps[stepIdx++];
+  step.action.call(step);
+  const delay = step.isSeparator ? 300 : 900;
+  setTimeout(() => {
+    busy = false;
+    if (animating) setTimeout(runStep, 150/speed);
+  }, delay / speed);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SIDE PANEL
+// ─────────────────────────────────────────────────────────────────────────────
+function updateSidePanel() {
+  const slots = document.getElementById('wmSlots');
+  if (wmContents.length === 0) {
+    slots.innerHTML = '<div class="wm-slot empty"><span style="color:#3a5070;font-family:\'Share Tech Mono\',monospace;font-size:9px;">— empty —</span></div>';
+    return;
+  }
+  slots.innerHTML = wmContents.map(item => {
+    const col = item.status==='new'?'new':item.status==='evict'?'evict':'kept';
+    const colClass = `filled-${item.status==='new'?'new':item.status==='evict'?'evict':'kept'}`;
+    const tag = item.status==='new'?'▲ NEW':item.status==='evict'?'▼ EVICT':'● KEPT';
+    const vd = (item.node.act/item.node.tokens).toFixed(4);
+    return `<div class="wm-slot ${colClass}">
+      <span class="wm-name">${item.node.label}</span>
+      <span class="wm-score ${col}">${item.node.act.toFixed(3)} | ${item.node.tokens}t<br><span style="font-size:8px;opacity:.7">${tag} | D:${vd}</span></span>
+    </div>`;
+  }).join('');
+}
+
+function logEvent(label, type) {
+  const log = document.getElementById('evLog');
+  const e = document.createElement('div'); e.className = 'ev-entry';
+  const tagMap = { enter:'enter', keep:'keep', evict:'evict', defer:'defer' };
+  const txtMap = { enter:'ENTER', keep:'KEEP', evict:'EVICT', defer:'DEFER' };
+  e.innerHTML = `<span class="ev-label">${label}</span><span class="ev-tag ${tagMap[type]}">${txtMap[type]}</span>`;
+  log.appendChild(e); log.scrollTop = log.scrollHeight;
+}
+
+function updateStatus() {
+  document.getElementById('stTurn').textContent   = `Turn ${currentTurn+1}`;
+  document.getElementById('stTokens').textContent = `${totalTokens} / ${TOKEN_BUDGET}`;
+  document.getElementById('stEnter').textContent  = enterCount;
+  document.getElementById('stEvict').textContent  = evictCount;
+  document.getElementById('stDefer').textContent  = deferCount;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESET
+// ─────────────────────────────────────────────────────────────────────────────
+function resetAll() {
+  animating = false; busy = false; stepIdx = 0;
+  wmContents = []; deferQueue = []; visibleIncoming = [];
+  particles = []; wmFlash = {};
+  totalTokens = 0; enterCount = 0; evictCount = 0; deferCount = 0;
+  currentTurn = 0;
+  pfcGlow = 0;
+  if (autoTimer) clearTimeout(autoTimer);
+  document.getElementById('runBtn').textContent = '▶ Run';
+  document.getElementById('runBtn').classList.remove('paused');
+  document.getElementById('evLog').innerHTML = '';
+  document.querySelectorAll('.turn-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+  updateSidePanel(); updateStatus();
+  initSteps();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTS
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', function() {
+  if (animating) {
+    animating = false;
+    this.textContent = '▶ Resume';
+    this.classList.remove('paused'); return;
+  }
+  if (stepIdx >= allSteps.length) { resetAll(); }
+  animating = true;
+  this.textContent = '⏸ Pause';
+  this.classList.add('paused');
+  runStep();
+});
+
+document.getElementById('stepBtn').addEventListener('click', function() {
+  animating = false;
+  document.getElementById('runBtn').textContent = '▶ Resume';
+  document.getElementById('runBtn').classList.remove('paused');
+  if (!busy && stepIdx < allSteps.length) runStep();
+});
+
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+document.getElementById('spd').addEventListener('input', function() {
+  speed = parseFloat(this.value);
+});
+
+document.querySelectorAll('.turn-btn').forEach((btn, i) => {
+  btn.addEventListener('click', () => {
+    // Jump to that turn's start
+    resetAll();
+    // fast-forward to turn i
+    let target = 0;
+    for (let j = 0; j < allSteps.length; j++) {
+      if (allSteps[j].isSeparator && allSteps[j].turnIdx === i) { target = j; break; }
+    }
+    stepIdx = target;
+    document.querySelectorAll('.turn-btn').forEach((b,k) => b.classList.toggle('active', k===i));
+    currentTurn = i;
+    updateStatus();
+  });
+});
+
+// Init
+resetAll();
+updateSidePanel();
+</script>
+
+</body>
+</html>
