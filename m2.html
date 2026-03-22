@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mechanism 3 — Hippocampal Indexing</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #04080e;
+  --bg2:     #080f1a;
+  --bg3:     #0c1525;
+  --panel:   #060c16;
+  --border:  #112240;
+  --hippo:   #ff6b35;
+  --schema:  #00b4d8;
+  --infer:   #c77dff;
+  --complete:#06d6a0;
+  --sparse:  #ffd166;
+  --text:    #d0e4ff;
+  --muted:   #3d5a80;
+  --dim:     #0f1e30;
+}
+
+- { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘Inter’, sans-serif;
+min-height: 100vh;
+overflow-x: hidden;
+}
+
+/* Neural net background */
+#neural-bg {
+position: fixed; inset: 0;
+pointer-events: none; z-index: 0;
+opacity: 0.06;
+}
+
+/* Grain texture */
+body::after {
+content: ‘’;
+position: fixed; inset: 0;
+pointer-events: none; z-index: 50;
+background-image: url(“data:image/svg+xml,%3Csvg viewBox=‘0 0 256 256’ xmlns=‘http://www.w3.org/2000/svg’%3E%3Cfilter id=‘noise’%3E%3CfeTurbulence type=‘fractalNoise’ baseFrequency=‘0.9’ numOctaves=‘4’ stitchTiles=‘stitch’/%3E%3C/filter%3E%3Crect width=‘100%25’ height=‘100%25’ filter=‘url(%23noise)’ opacity=‘0.4’/%3E%3C/svg%3E”);
+opacity: 0.03;
+}
+
+.wrapper {
+position: relative; z-index: 1;
+max-width: 1300px; margin: 0 auto;
+padding: 24px 20px;
+}
+
+/* ── Header ── */
+header {
+display: grid;
+grid-template-columns: auto 1fr auto;
+align-items: center; gap: 20px;
+margin-bottom: 24px;
+padding-bottom: 18px;
+border-bottom: 1px solid var(–border);
+}
+
+.mech-num {
+font-family: ‘Orbitron’, monospace;
+font-size: 48px; font-weight: 900;
+color: var(–hippo);
+line-height: 1;
+text-shadow: 0 0 30px #ff6b3560;
+letter-spacing: -2px;
+}
+
+.header-mid h1 {
+font-family: ‘Orbitron’, monospace;
+font-size: clamp(16px, 2.8vw, 26px);
+font-weight: 700; letter-spacing: 1px;
+color: var(–text);
+}
+.header-mid h1 span { color: var(–hippo); }
+.header-mid p {
+font-family: ‘Space Mono’, monospace;
+font-size: 10px; color: var(–muted);
+margin-top: 4px; letter-spacing: 2px;
+text-transform: uppercase;
+}
+
+.header-tags { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.tag {
+padding: 3px 10px; border-radius: 2px;
+font-family: ‘Space Mono’, monospace;
+font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700;
+}
+.tag-h  { background: #ff6b3515; color: var(–hippo); border: 1px solid #ff6b3530; }
+.tag-s  { background: #00b4d815; color: var(–schema); border: 1px solid #00b4d830; }
+.tag-c  { background: #06d6a015; color: var(–complete); border: 1px solid #06d6a030; }
+
+/* ── Layout ── */
+.main {
+display: grid;
+grid-template-columns: 1fr 340px;
+gap: 16px;
+align-items: start;
+}
+@media(max-width:920px) { .main { grid-template-columns: 1fr; } }
+
+/* ── Stage ── */
+.stage {
+background: var(–bg2);
+border: 1px solid var(–border);
+border-radius: 10px; overflow: hidden;
+}
+canvas { display: block; width: 100%; }
+
+/* ── Controls ── */
+.ctrl {
+display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+padding: 12px 14px;
+border-top: 1px solid var(–border);
+background: var(–panel);
+}
+.btn {
+padding: 7px 16px; border-radius: 4px; border: none;
+font-family: ‘Space Mono’, monospace;
+font-size: 10px; font-weight: 700;
+letter-spacing: 1px; cursor: pointer; transition: all .2s;
+}
+.btn-run   { background: var(–hippo); color: #04080e; }
+.btn-run:hover   { box-shadow: 0 0 20px #ff6b3560; transform: translateY(-1px); }
+.btn-run.paused  { background: var(–sparse); color: #04080e; }
+.btn-step  { background: transparent; color: var(–muted); border: 1px solid var(–border); }
+.btn-step:hover  { border-color: var(–schema); color: var(–schema); }
+.btn-reset { background: transparent; color: var(–muted); border: 1px solid var(–border); }
+.btn-reset:hover { border-color: var(–hippo); color: var(–hippo); }
+.btn:disabled { opacity:.3; cursor:not-allowed; transform:none!important; box-shadow:none!important; }
+.sp-ctrl { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.sp-label { font-family:‘Space Mono’,monospace; font-size:9px; color:var(–muted); }
+input[type=range] { width:72px; accent-color:var(–hippo); }
+
+/* ── Status ── */
+.statusbar {
+padding: 8px 14px;
+border-top: 1px solid var(–border);
+background: var(–panel);
+display: flex; gap: 20px; flex-wrap: wrap;
+font-family: ‘Space Mono’, monospace; font-size: 9px; color: var(–muted);
+}
+.stt em { font-style:normal; font-weight:700; }
+.stt-h em { color: var(–hippo); }
+.stt-s em { color: var(–schema); }
+.stt-i em { color: var(–infer); }
+.stt-c em { color: var(–complete); }
+
+/* ── Side panel ── */
+.side { display: flex; flex-direction: column; gap: 14px; }
+.card {
+background: var(–bg2); border: 1px solid var(–border);
+border-radius: 10px; overflow: hidden;
+}
+.card-hd {
+padding: 8px 14px; border-bottom: 1px solid var(–border);
+background: var(–panel);
+font-family: ‘Space Mono’, monospace; font-size: 9px;
+font-weight: 700; color: var(–muted); text-transform: uppercase; letter-spacing: 2px;
+}
+.card-bd { padding: 12px 14px; }
+
+/* TSO editor */
+.tso-box {
+background: var(–bg3); border: 1px solid var(–border);
+border-radius: 6px; padding: 10px 12px;
+font-family: ‘Space Mono’, monospace; font-size: 10px;
+line-height: 2; color: var(–text);
+}
+.tso-key   { color: var(–schema); }
+.tso-val   { color: var(–sparse); }
+.tso-inf   { color: var(–infer); font-style: italic; }
+.tso-new   { color: var(–complete); animation: fadeUp .5s ease; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+
+/* Inference log */
+.inf-log {
+max-height: 190px; overflow-y: auto;
+font-family: ‘Space Mono’, monospace; font-size: 9px;
+}
+.inf-log::-webkit-scrollbar { width:3px; }
+.inf-log::-webkit-scrollbar-thumb { background:var(–border); }
+.inf-entry {
+display: grid; grid-template-columns: 1fr auto;
+gap: 6px; padding: 4px 0;
+border-bottom: 1px solid var(–dim);
+animation: popIn .25s ease;
+}
+.inf-entry:last-child { border-bottom: none; }
+@keyframes popIn { from { opacity:0; transform:scale(.97); } to { opacity:1; transform:none; } }
+.inf-name { color: var(–text); }
+.inf-via  { color: var(–schema); font-size: 8px; }
+.inf-badge {
+padding: 1px 6px; border-radius: 2px; font-size: 8px;
+background: #c77dff18; color: var(–infer); border: 1px solid #c77dff30;
+}
+
+/* Concept */
+.concept { font-size: 12px; line-height: 1.75; color: var(–text); font-family: ‘Space Mono’, monospace; }
+.concept .hh { color: var(–hippo); font-weight:700; }
+.concept .hs { color: var(–schema); font-weight:700; }
+.concept .hi { color: var(–infer); font-weight:700; }
+.concept .hc { color: var(–complete); font-weight:700; }
+
+/* Phase pill row */
+.phase-pills { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
+.phase-pill {
+padding: 5px 12px; border-radius: 20px;
+font-family: ‘Space Mono’, monospace; font-size: 9px;
+font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+border: 1px solid var(–border); color: var(–muted);
+cursor: pointer; transition: all .2s;
+}
+.phase-pill.active {
+background: #ff6b3520; border-color: var(–hippo); color: var(–hippo);
+box-shadow: 0 0 12px #ff6b3530;
+}
+
+/* Formula */
+.fml {
+background: var(–bg3); border: 1px solid var(–border);
+border-radius: 6px; padding: 10px 12px;
+font-family: ‘Space Mono’, monospace; font-size: 10px;
+line-height: 2; color: var(–text);
+}
+.fml .f1 { color: var(–hippo); font-weight:700; }
+.fml .f2 { color: var(–schema); font-weight:700; }
+.fml .f3 { color: var(–infer); font-weight:700; }
+.fml .f4 { color: var(–complete); font-weight:700; }
+</style>
+
+</head>
+<body>
+
+<canvas id="neural-bg"></canvas>
+
+<div class="wrapper">
+
+  <header>
+    <div class="mech-num">03</div>
+    <div class="header-mid">
+      <h1>Hippocampal <span>Indexing</span></h1>
+      <p>Episodic-Semantic Bridge · Ontology Pattern Completion · Context Enrichment</p>
+    </div>
+    <div class="header-tags">
+      <div class="tag tag-h">Hippocampus</div>
+      <div class="tag tag-s">Schema Layer</div>
+      <div class="tag tag-c">Pattern Complete</div>
+    </div>
+  </header>
+
+  <div class="phase-pills">
+    <div class="phase-pill active" data-ph="0">Step 1 · Detect Sparsity</div>
+    <div class="phase-pill" data-ph="1">Step 2 · Schema Traversal</div>
+    <div class="phase-pill" data-ph="2">Step 3 · Enrich TSO</div>
+    <div class="phase-pill" data-ph="3">Step 4 · New Anchors</div>
+  </div>
+
+  <div class="main">
+    <div>
+      <div class="stage">
+        <canvas id="main"></canvas>
+        <div class="ctrl">
+          <button class="btn btn-run"   id="runBtn">▶ Run</button>
+          <button class="btn btn-step"  id="stepBtn">Step</button>
+          <button class="btn btn-reset" id="resetBtn">↺ Reset</button>
+          <div class="sp-ctrl">
+            <span class="sp-label">Speed</span>
+            <input type="range" id="spd" min="0.4" max="3" step="0.2" value="1">
+          </div>
+        </div>
+        <div class="statusbar">
+          <div class="stt stt-h">Phase: <em id="stPhase">—</em></div>
+          <div class="stt stt-s">TSO Fields: <em id="stFields">2</em></div>
+          <div class="stt stt-i">Inferred: <em id="stInferred">0</em></div>
+          <div class="stt stt-c">New Anchors: <em id="stAnchors">0</em></div>
+        </div>
+      </div>
+    </div>
+
+```
+<div class="side">
+
+  <div class="card">
+    <div class="card-hd">What Is Hippocampal Indexing?</div>
+    <div class="card-bd">
+      <div class="concept">
+        The <span class="hh">hippocampus</span> doesn't store facts — it holds pointers to distributed memory traces. Given a <span class="hs">partial cue</span>, it reconstructs the most probable <span class="hc">full context</span> via <span class="hi">pattern completion</span>.<br><br>
+        The engine replicates this: a sparse TSO is enriched by traversing the <span class="hs">ontology schema</span> for implied dimensions — inferring what was never explicitly stated.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">TSO — Live State</div>
+    <div class="card-bd" style="padding:0">
+      <div class="tso-box" style="margin:0; border-radius:0; border:none;" id="tsoBox">
+        <span class="tso-key">task_type</span>: <span class="tso-val">"code_review"</span><br>
+        <span class="tso-key">language</span>:  <span class="tso-val">"Python"</span><br>
+        <span class="tso-key tso-inf">// inferred fields appear below...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Inference Log</div>
+    <div class="card-bd" style="padding:0">
+      <div class="inf-log" id="infLog" style="padding:8px 12px;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Pattern Completion Rule</div>
+    <div class="card-bd">
+      <div class="fml">
+        <span class="f1">sparse TSO</span> + <span class="f2">ontology schema</span><br>
+        &nbsp;→ <span class="f3">entailment traversal</span><br>
+        &nbsp;→ <span class="f4">enriched TSO</span><br>
+        &nbsp;→ richer <span class="f1">anchor nodes</span><br><br>
+        <span class="f2">code_review</span> + <span class="f2">Python</span><br>
+        &nbsp;→ implies → <span class="f3">PEP8</span>, <span class="f3">SQL risks</span>,<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="f3">anti-patterns</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+```
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// NEURAL BACKGROUND
+// ─────────────────────────────────────────────────────────────────────────────
+(function() {
+  const c = document.getElementById('neural-bg');
+  const cx = c.getContext('2d');
+  let nodes = [];
+  function init() {
+    c.width = window.innerWidth; c.height = window.innerHeight;
+    nodes = Array.from({length: 40}, () => ({
+      x: Math.random()*c.width, y: Math.random()*c.height,
+      vx: (Math.random()-.5)*.15, vy: (Math.random()-.5)*.15,
+    }));
+  }
+  function draw() {
+    cx.clearRect(0,0,c.width,c.height);
+    // connections
+    nodes.forEach((a,i) => nodes.slice(i+1).forEach(b => {
+      const d = Math.hypot(a.x-b.x, a.y-b.y);
+      if (d < 180) {
+        cx.strokeStyle = `rgba(255,107,53,${(1-d/180)*.4})`;
+        cx.lineWidth = .5;
+        cx.beginPath(); cx.moveTo(a.x,a.y); cx.lineTo(b.x,b.y); cx.stroke();
+      }
+    }));
+    // dots
+    nodes.forEach(n => {
+      cx.fillStyle = 'rgba(255,107,53,.6)';
+      cx.beginPath(); cx.arc(n.x,n.y,1.5,0,Math.PI*2); cx.fill();
+    });
+    nodes.forEach(n => {
+      n.x+=n.vx; n.y+=n.vy;
+      if(n.x<0||n.x>c.width) n.vx*=-1;
+      if(n.y<0||n.y>c.height) n.vy*=-1;
+    });
+    requestAnimationFrame(draw);
+  }
+  init(); draw(); window.addEventListener('resize', init);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA MODEL
+// ─────────────────────────────────────────────────────────────────────────────
+// Sparse TSO inputs (always present)
+const TSO_BASE = [
+  { key: 'task_type', val: '"code_review"',  color: '#00b4d8' },
+  { key: 'language',  val: '"Python"',        color: '#00b4d8' },
+];
+
+// Ontology inferences: each step traverses schema edges to infer new dimensions
+const INFERENCES = [
+  {
+    id: 'PEP8',
+    tsoKey: 'style_guide',
+    tsoVal: 'PEP8StyleGuide',
+    via: 'Python → requires → StyleGuide',
+    anchor: true,
+    anchorSim: 0.83,
+    schemaEdge: { from: 'Python', to: 'PEP8StyleGuide', rel: 'requires', w: 0.90 },
+    delay: 0,
+  },
+  {
+    id: 'MUTABLE',
+    tsoKey: 'anti_pattern_1',
+    tsoVal: 'MutableDefaultArgs',
+    via: 'Python → implies → CommonAntiPatterns',
+    anchor: true,
+    anchorSim: 0.76,
+    schemaEdge: { from: 'Python', to: 'MutableDefaultArgs', rel: 'implies', w: 0.80 },
+    delay: 1,
+  },
+  {
+    id: 'BARE_EXCEPT',
+    tsoKey: 'anti_pattern_2',
+    tsoVal: 'BareExceptClause',
+    via: 'Python → implies → CommonAntiPatterns',
+    anchor: true,
+    anchorSim: 0.74,
+    schemaEdge: { from: 'Python', to: 'BareExceptClause', rel: 'implies', w: 0.78 },
+    delay: 2,
+  },
+  {
+    id: 'SQL',
+    tsoKey: 'security_risk_1',
+    tsoVal: 'SQLInjectionPattern',
+    via: 'code_review → triggers → SecurityScan',
+    anchor: true,
+    anchorSim: 0.79,
+    schemaEdge: { from: 'code_review', to: 'SQLInjectionPattern', rel: 'triggers', w: 0.85 },
+    delay: 3,
+  },
+  {
+    id: 'CREDS',
+    tsoKey: 'security_risk_2',
+    tsoVal: 'HardcodedCredentials',
+    via: 'code_review → triggers → SecurityScan',
+    anchor: false,
+    anchorSim: 0.71,
+    schemaEdge: { from: 'code_review', to: 'HardcodedCredentials', rel: 'triggers', w: 0.80 },
+    delay: 4,
+  },
+  {
+    id: 'TYPEHINTS',
+    tsoKey: 'anti_pattern_3',
+    tsoVal: 'ImproperTypeHints',
+    via: 'Python → implies → TypeAnnotationPolicy',
+    anchor: false,
+    anchorSim: 0.68,
+    schemaEdge: { from: 'Python', to: 'ImproperTypeHints', rel: 'implies', w: 0.72 },
+    delay: 5,
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CANVAS
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('main');
+const ctx    = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  W = r.width; H = 540;
+  canvas.width = W; canvas.height = H;
+  canvas.style.height = H + 'px';
+}
+resize(); window.addEventListener('resize', () => { resize(); });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LAYOUT
+// The visualisation has four columns:
+//   [SPARSE TSO] --> [HIPPOCAMPUS] --> [SCHEMA GRAPH] --> [ENRICHED TSO + NEW ANCHORS]
+// ─────────────────────────────────────────────────────────────────────────────
+function L() {
+  return {
+    sparseX:   W * 0.10,
+    hippoX:    W * 0.35,
+    hippoY:    H * 0.50,
+    hippoR:    52,
+    schemaX:   W * 0.60,
+    enrichX:   W * 0.87,
+    rowH:      56,
+    startY:    100,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let st = {
+  phase: -1,           // -1=idle
+  revealedInf: [],     // indices of revealed inferences
+  activeEdge: null,    // currently animating edge
+  newAnchors: [],      // anchors revealed so far
+  pulses: [],          // { from, to, t, color }
+  hippoGlow: 0,
+  hippoGlowColor: '#ff6b35',
+  sparseDetected: false,
+  enrichedVisible: [],
+  speed: 1,
+  animating: false,
+  busy: false,
+  stepIdx: 0,
+};
+
+let autoTimer = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GEOMETRY HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function sparseNodePos(idx) {
+  const l = L();
+  return { x: l.sparseX, y: l.startY + idx * l.rowH };
+}
+
+function schemaNodePos(inf) {
+  const l = L();
+  const idx = INFERENCES.indexOf(inf);
+  return { x: l.schemaX, y: l.startY + idx * l.rowH + 20 };
+}
+
+function enrichedNodePos(idx) {
+  const l = L();
+  return { x: l.enrichX, y: l.startY + idx * l.rowH + 20 };
+}
+
+function anchorPos(idx) {
+  const l = L();
+  const anchorInfs = INFERENCES.filter(i => i.anchor);
+  const total = anchorInfs.length;
+  const spread = (total - 1) * 60;
+  return {
+    x: l.enrichX,
+    y: H * 0.55 + (idx - (total-1)/2) * 64,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDERING
+// ─────────────────────────────────────────────────────────────────────────────
+function drawPill(x, y, label, sublabel, color, alpha = 1, scale = 1) {
+  const pw = 148 * scale, ph = 38 * scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.shadowColor = color; ctx.shadowBlur = 10 * scale;
+  ctx.fillStyle = '#04080e';
+  ctx.strokeStyle = color; ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath(); ctx.roundRect(-pw/2, -ph/2, pw, ph, 6*scale);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  // glow bar
+  ctx.globalAlpha = alpha * 0.18;
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.roundRect(-pw/2+3, -ph/2+3, pw-6, ph-6, 4*scale);
+  ctx.fill();
+  ctx.globalAlpha = alpha;
+  ctx.font = `bold ${Math.round(10*scale)}px 'Space Mono'`;
+  ctx.textAlign = 'center'; ctx.fillStyle = '#d0e4ff';
+  ctx.fillText(label.length > 16 ? label.slice(0,15)+'…' : label, 0, -3*scale);
+  if (sublabel) {
+    ctx.font = `${Math.round(8.5*scale)}px 'Space Mono'`;
+    ctx.fillStyle = color;
+    ctx.fillText(sublabel, 0, 10*scale);
+  }
+  ctx.restore();
+}
+
+function drawHippocampus(l, now) {
+  const { hippoX: hx, hippoY: hy, hippoR: hr } = l;
+  ctx.save();
+
+  // Outer orbit rings
+  for (let i = 0; i < 3; i++) {
+    const t = ((now / (2000 + i*600)) % 1);
+    const r = hr + 20 + i * 18;
+    ctx.globalAlpha = 0.12 + i * 0.04;
+    ctx.strokeStyle = '#ff6b35';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI*2); ctx.stroke();
+    // orbital dot
+    const ang = t * Math.PI * 2 + i * (Math.PI*2/3);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#ff6b35';
+    ctx.beginPath(); ctx.arc(hx + Math.cos(ang)*r, hy + Math.sin(ang)*r, 3, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.globalAlpha = 1;
+
+  // Flash
+  if (st.hippoGlow > 0) {
+    ctx.globalAlpha = Math.min(1, st.hippoGlow) * 0.6;
+    ctx.shadowColor = st.hippoGlowColor; ctx.shadowBlur = 50;
+    ctx.fillStyle = st.hippoGlowColor;
+    ctx.beginPath(); ctx.arc(hx, hy, hr + 16, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    st.hippoGlow -= 0.03;
+    if (st.hippoGlow < 0) st.hippoGlow = 0;
+  }
+  ctx.globalAlpha = 1;
+
+  // Body
+  const grad = ctx.createRadialGradient(hx, hy-8, 0, hx, hy, hr);
+  grad.addColorStop(0, '#2a1008'); grad.addColorStop(1, '#0f0603');
+  ctx.fillStyle = grad;
+  ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 2;
+  ctx.shadowColor = '#ff6b35'; ctx.shadowBlur = 20;
+  ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Curved memory trace lines inside
+  ctx.strokeStyle = '#ff6b3540'; ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    const t = (now/3000 + i/5) % 1;
+    const y0 = hy - hr * 0.6 + i * hr * 0.3;
+    ctx.globalAlpha = 0.3 + Math.sin(t * Math.PI * 2 + i) * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(hx - hr*0.7, y0);
+    ctx.bezierCurveTo(
+      hx - hr*0.2, y0 - 12 + i*4,
+      hx + hr*0.2, y0 + 12 - i*4,
+      hx + hr*0.7, y0 + (i%2===0?-8:8)
+    );
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Label
+  ctx.font = "bold 10px 'Orbitron'";
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ff6b35';
+  ctx.fillText('HIPPOCAMPUS', hx, hy - hr - 14);
+  ctx.font = "8px 'Space Mono'";
+  ctx.fillStyle = '#3d5a80';
+  ctx.fillText('pattern indexer', hx, hy + hr + 14);
+
+  // H symbol
+  ctx.font = "bold 20px 'Orbitron'";
+  ctx.fillStyle = '#ff6b35';
+  ctx.globalAlpha = 0.8;
+  ctx.fillText('H', hx, hy + 7);
+
+  ctx.restore();
+}
+
+function drawSchemaCloud(l) {
+  // Schema ontology label (background)
+  const sx = l.schemaX, sy = 52;
+  ctx.save();
+  ctx.font = "bold 9px 'Space Mono'";
+  ctx.textAlign = 'center'; ctx.fillStyle = '#00b4d850';
+  ctx.letterSpacing = '2px';
+  ctx.fillText('ONTOLOGY SCHEMA', sx, sy);
+  ctx.restore();
+}
+
+function drawSparseIndicator(l) {
+  // Sparse TSO box on left
+  const bx = l.sparseX - 80, by = l.startY - 40, bw = 160, bh = 30;
+  ctx.save();
+  ctx.fillStyle = '#0c1525';
+  ctx.strokeStyle = st.sparseDetected ? '#ffd16660' : '#112240';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.fill(); ctx.stroke();
+  ctx.font = "bold 9px 'Space Mono'";
+  ctx.textAlign = 'center';
+  ctx.fillStyle = st.sparseDetected ? '#ffd166' : '#3d5a80';
+  ctx.fillText(st.sparseDetected ? '⚠ SPARSE TSO DETECTED' : 'TSO INPUT', l.sparseX, by + 19);
+  ctx.restore();
+}
+
+function drawPulses() {
+  st.pulses = st.pulses.filter(p => p.t < 1);
+  st.pulses.forEach(p => {
+    const x = p.fromX + (p.toX - p.fromX) * p.t;
+    const y = p.fromY + (p.toY - p.fromY) * p.t + Math.sin(p.t * Math.PI) * -30;
+    // trail
+    for (let i = 1; i <= 4; i++) {
+      const tt = Math.max(0, p.t - i*0.06);
+      const tx = p.fromX + (p.toX - p.fromX) * tt;
+      const ty = p.fromY + (p.toY - p.fromY) * tt + Math.sin(tt * Math.PI) * -30;
+      ctx.save();
+      ctx.globalAlpha = (0.15 - i*0.03);
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(tx, ty, 4-i, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = p.color;
+    ctx.shadowColor = p.color; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    p.t += 0.018 * st.speed;
+  });
+}
+
+function drawConnectionLine(x1, y1, x2, y2, color, dashed = false, alpha = 0.4) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color; ctx.lineWidth = 1;
+  if (dashed) ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.setLineDash([]); ctx.restore();
+}
+
+function drawAnchorNode(x, y, inf, alpha) {
+  const r = 22;
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 16;
+  ctx.fillStyle = '#1a1200';
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.font = "bold 8px 'Space Mono'";
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffd166';
+  const lbl = inf.tsoVal.length > 10 ? inf.tsoVal.slice(0,9)+'…' : inf.tsoVal;
+  ctx.fillText(lbl, x, y - 2);
+  ctx.font = "7px 'Space Mono'";
+  ctx.fillStyle = '#ffd16680';
+  ctx.fillText('A₀='+inf.anchorSim.toFixed(2), x, y + 10);
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+let rafId;
+function render(now = 0) {
+  const l = L();
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#04080e'); bg.addColorStop(1, '#080f1a');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  // Grid dots
+  ctx.fillStyle = '#112240';
+  for (let gx = 25; gx < W; gx += 45)
+    for (let gy = 25; gy < H; gy += 45) {
+      ctx.beginPath(); ctx.arc(gx, gy, 0.8, 0, Math.PI*2); ctx.fill();
+    }
+
+  drawSchemaCloud(l);
+  drawSparseIndicator(l);
+
+  // ── Column labels ──
+  const colLabels = [
+    { x: l.sparseX, label: 'SPARSE TSO', color: '#ffd166' },
+    { x: l.hippoX,  label: 'HIPPOCAMPUS', color: '#ff6b35' },
+    { x: l.schemaX, label: 'SCHEMA GRAPH', color: '#00b4d8' },
+    { x: l.enrichX, label: st.phase >= 2 ? 'ENRICHED TSO' : 'INFERRED', color: st.phase >= 2 ? '#06d6a0' : '#c77dff' },
+  ];
+  colLabels.forEach(cl => {
+    ctx.save();
+    ctx.font = "bold 9px 'Space Mono'";
+    ctx.textAlign = 'center'; ctx.fillStyle = cl.color + '60';
+    ctx.fillText(cl.label, cl.x, 68);
+    // vertical dotted guide
+    ctx.globalAlpha = 0.06; ctx.strokeStyle = cl.color; ctx.lineWidth = 1;
+    ctx.setLineDash([3, 6]);
+    ctx.beginPath(); ctx.moveTo(cl.x, 76); ctx.lineTo(cl.x, H - 20); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+  });
+
+  // ── Sparse TSO nodes (always visible) ──
+  TSO_BASE.forEach((field, i) => {
+    const p = sparseNodePos(i);
+    drawPill(p.x, p.y + 16, field.key, field.val, '#00b4d8', 1);
+  });
+
+  // ── Arrows: sparse → hippocampus ──
+  if (st.sparseDetected) {
+    TSO_BASE.forEach((field, i) => {
+      const p = sparseNodePos(i);
+      drawConnectionLine(p.x + 74, p.y + 16, l.hippoX - l.hippoR - 8, l.hippoY, '#ffd16640', true, 0.5);
+    });
+  }
+
+  // ── Hippocampus ──
+  drawHippocampus(l, now);
+
+  // ── Schema nodes (revealed as inferences happen) ──
+  INFERENCES.forEach((inf, idx) => {
+    if (!st.revealedInf.includes(idx)) return;
+    const sp = schemaNodePos(inf);
+    const alpha = st.revealedInf.includes(idx) ? 1 : 0.2;
+
+    // Line: hippocampus → schema
+    drawConnectionLine(l.hippoX + l.hippoR + 8, l.hippoY, sp.x - 74, sp.y, '#ff6b3550', false, 0.5);
+
+    // Schema pill
+    drawPill(sp.x, sp.y, inf.tsoVal, inf.via.split(' → ')[2] || inf.via.split(' ')[0], '#00b4d8', alpha, 0.9);
+
+    // Arrow label (rel type)
+    ctx.save();
+    ctx.font = "7px 'Space Mono'"; ctx.textAlign = 'center';
+    ctx.fillStyle = '#00b4d860';
+    const mx = (l.hippoX + l.hippoR + sp.x - 74) / 2;
+    const my = (l.hippoY + sp.y) / 2 - 8;
+    ctx.fillText(inf.schemaEdge.rel, mx, my);
+    ctx.restore();
+  });
+
+  // ── Enriched inferences / new anchors (phase 2+) ──
+  st.enrichedVisible.forEach(idx => {
+    const inf = INFERENCES[idx];
+    const ep = enrichedNodePos(idx);
+
+    // Schema → enriched line
+    const sp = schemaNodePos(inf);
+    drawConnectionLine(sp.x + 74, sp.y, ep.x - 74, ep.y, '#c77dff50', true, 0.5);
+
+    // If anchor → show as gold anchor node
+    if (inf.anchor && st.newAnchors.includes(idx)) {
+      const ap = anchorPos(st.newAnchors.indexOf(idx));
+      drawConnectionLine(ep.x + 74, ep.y, ap.x - 28, ap.y, '#ffd16650', false, 0.5);
+      drawAnchorNode(ap.x + 28, ap.y, inf, 1);
+    }
+
+    // Enriched TSO pill
+    drawPill(ep.x, ep.y, inf.tsoKey, inf.tsoVal, st.newAnchors.includes(idx) ? '#ffd166' : '#c77dff', 1, 0.9);
+  });
+
+  // ── Original anchors label (phase >= 1) ──
+  if (st.phase >= 0) {
+    const ax = l.enrichX + 28 + 50;
+    ctx.save();
+    ctx.font = "bold 9px 'Space Mono'";
+    ctx.textAlign = 'center'; ctx.fillStyle = '#ffd16650';
+    ctx.fillText('NEW ANCHORS', ax, l.startY - 16);
+    ctx.restore();
+  }
+
+  // ── Pulses ──
+  drawPulses();
+
+  rafId = requestAnimationFrame(render);
+}
+rafId = requestAnimationFrame(render);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP MACHINE
+// ─────────────────────────────────────────────────────────────────────────────
+const STEPS = [
+  // Step 0: detect sparsity
+  {
+    phase: 0, phaseLabel: 'Detect Sparsity',
+    action() {
+      st.sparseDetected = true;
+      st.hippoGlow = 1.5; st.hippoGlowColor = '#ffd166';
+      flashPhasePill(0);
+      updateStats();
+    }
+  },
+  // Steps 1..N: each inference
+  ...INFERENCES.map((inf, idx) => ({
+    phase: idx < 3 ? 1 : 2,
+    phaseLabel: idx < 3 ? 'Schema Traversal' : 'Enrich TSO',
+    action() {
+      // Reveal schema node
+      if (!st.revealedInf.includes(idx)) st.revealedInf.push(idx);
+      st.hippoGlow = 1.2; st.hippoGlowColor = '#00b4d8';
+
+      // Fire pulse: hippocampus → schema
+      const l = L(), sp = schemaNodePos(inf);
+      st.pulses.push({ fromX: l.hippoX + l.hippoR, fromY: l.hippoY, toX: sp.x - 74, toY: sp.y, t: 0, color: '#00b4d8' });
+
+      // After pulse → reveal enriched
+      setTimeout(() => {
+        if (!st.enrichedVisible.includes(idx)) st.enrichedVisible.push(idx);
+        // Pulse schema → enriched
+        const ep = enrichedNodePos(idx);
+        st.pulses.push({ fromX: sp.x + 74, fromY: sp.y, toX: ep.x - 74, toY: ep.y, t: 0, color: '#c77dff' });
+        addInfLog(inf);
+        updateTSOBox();
+        if (inf.anchor) {
+          setTimeout(() => {
+            const aIdx = INFERENCES.filter(i=>i.anchor).indexOf(inf);
+            if (!st.newAnchors.includes(idx)) st.newAnchors.push(idx);
+            updateStats();
+          }, 400 / st.speed);
+        }
+        updateStats();
+        flashPhasePill(idx < 3 ? 1 : 2);
+      }, 700 / st.speed);
+    }
+  })),
+  // Final: new anchors summary
+  {
+    phase: 3, phaseLabel: 'New Anchors Ready',
+    action() {
+      st.hippoGlow = 2; st.hippoGlowColor = '#06d6a0';
+      flashPhasePill(3);
+      updateStats();
+    }
+  },
+];
+
+let stepIdx = 0;
+let busy = false;
+
+function runStep() {
+  if (busy || stepIdx >= STEPS.length) {
+    if (stepIdx >= STEPS.length) {
+      st.animating = false;
+      document.getElementById('runBtn').textContent = '▶ Run';
+      document.getElementById('runBtn').classList.remove('paused');
+    }
+    return;
+  }
+  busy = true;
+  const step = STEPS[stepIdx++];
+  st.phase = step.phase;
+  document.getElementById('stPhase').textContent = step.phaseLabel;
+  step.action();
+  const delay = (step.phase === 0 ? 500 : 1200) / st.speed;
+  setTimeout(() => {
+    busy = false;
+    if (st.animating) {
+      setTimeout(runStep, 200 / st.speed);
+    }
+  }, delay);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TSO BOX UPDATER
+// ─────────────────────────────────────────────────────────────────────────────
+const TSO_TEMPLATE = [
+  { key: 'task_type', val: '"code_review"', cls: 'tso-key', vcls: 'tso-val', always: true },
+  { key: 'language',  val: '"Python"',      cls: 'tso-key', vcls: 'tso-val', always: true },
+];
+
+function updateTSOBox() {
+  const box = document.getElementById('tsoBox');
+  let html = '';
+  // base fields
+  html += `<span class="tso-key">task_type</span>: <span class="tso-val">"code_review"</span><br>`;
+  html += `<span class="tso-key">language</span>: <span class="tso-val">"Python"</span><br>`;
+  // inferred
+  st.enrichedVisible.forEach(idx => {
+    const inf = INFERENCES[idx];
+    html += `<span class="tso-key tso-new">${inf.tsoKey}</span>: <span class="tso-val tso-new">${inf.tsoVal}</span><br>`;
+  });
+  if (st.enrichedVisible.length === 0) {
+    html += `<span class="tso-inf">// inferred fields appear here...</span>`;
+  }
+  box.innerHTML = html;
+}
+
+function addInfLog(inf) {
+  const log = document.getElementById('infLog');
+  const e = document.createElement('div');
+  e.className = 'inf-entry';
+  e.innerHTML = `
+    <div>
+      <div class="inf-name">${inf.tsoVal}</div>
+      <div class="inf-via">${inf.via}</div>
+    </div>
+    <span class="inf-badge">inferred</span>
+  `;
+  log.appendChild(e);
+  log.scrollTop = log.scrollHeight;
+}
+
+function updateStats() {
+  document.getElementById('stFields').textContent    = 2 + st.enrichedVisible.length;
+  document.getElementById('stInferred').textContent  = st.enrichedVisible.length;
+  document.getElementById('stAnchors').textContent   = st.newAnchors.length;
+}
+
+function flashPhasePill(ph) {
+  document.querySelectorAll('.phase-pill').forEach((p, i) => p.classList.toggle('active', i === ph));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESET
+// ─────────────────────────────────────────────────────────────────────────────
+function resetAll() {
+  if (autoTimer) clearTimeout(autoTimer);
+  st = {
+    phase: -1, revealedInf: [], activeEdge: null,
+    newAnchors: [], pulses: [], hippoGlow: 0, hippoGlowColor: '#ff6b35',
+    sparseDetected: false, enrichedVisible: [],
+    speed: st.speed, animating: false, busy: false, stepIdx: 0,
+  };
+  stepIdx = 0; busy = false;
+  document.getElementById('infLog').innerHTML = '';
+  updateTSOBox();
+  updateStats();
+  document.getElementById('stPhase').textContent = '—';
+  document.getElementById('runBtn').textContent = '▶ Run';
+  document.getElementById('runBtn').classList.remove('paused');
+  document.getElementById('stepBtn').disabled = false;
+  document.querySelectorAll('.phase-pill').forEach((p, i) => p.classList.toggle('active', i === 0));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTS
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', function() {
+  if (st.animating) {
+    st.animating = false;
+    this.textContent = '▶ Resume';
+    this.classList.remove('paused');
+    return;
+  }
+  st.animating = true;
+  this.textContent = '⏸ Pause';
+  this.classList.add('paused');
+  runStep();
+});
+
+document.getElementById('stepBtn').addEventListener('click', function() {
+  st.animating = false;
+  document.getElementById('runBtn').textContent = '▶ Resume';
+  document.getElementById('runBtn').classList.remove('paused');
+  if (!busy && stepIdx < STEPS.length) runStep();
+});
+
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+document.getElementById('spd').addEventListener('input', function() {
+  st.speed = parseFloat(this.value);
+});
+
+document.querySelectorAll('.phase-pill').forEach((pill, i) => {
+  pill.addEventListener('click', () => flashPhasePill(i));
+});
+
+updateStats(); updateTSOBox();
+</script>
+
+</body>
+</html>
