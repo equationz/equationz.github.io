@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spreading Activation — Context Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #070b14;
+    --bg2:       #0d1424;
+    --bg3:       #111c30;
+    --panel:     #0a1020;
+    --border:    #1e3255;
+    --accent:    #00d4ff;
+    --accent2:   #7c3aed;
+    --gold:      #f59e0b;
+    --green:     #10b981;
+    --red:       #ef4444;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --dim:       #334155;
+  }
+
+- { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘Syne’, sans-serif;
+min-height: 100vh;
+overflow-x: hidden;
+}
+
+/* ── Starfield background ── */
+#starfield {
+position: fixed; inset: 0; pointer-events: none; z-index: 0;
+background: radial-gradient(ellipse at 20% 50%, #0d1f4020 0%, transparent 60%),
+radial-gradient(ellipse at 80% 20%, #1a0d4020 0%, transparent 50%);
+}
+
+.star {
+position: absolute; border-radius: 50%;
+background: white; animation: twinkle var(–d, 3s) ease-in-out infinite;
+animation-delay: var(–delay, 0s);
+}
+@keyframes twinkle {
+0%,100% { opacity: var(–min-op, 0.1); }
+50%      { opacity: var(–max-op, 0.6); }
+}
+
+/* ── Layout ── */
+.wrapper {
+position: relative; z-index: 1;
+max-width: 1300px; margin: 0 auto;
+padding: 32px 24px;
+}
+
+/* ── Header ── */
+header {
+display: flex; align-items: flex-start;
+justify-content: space-between; flex-wrap: wrap; gap: 16px;
+margin-bottom: 32px;
+padding-bottom: 24px;
+border-bottom: 1px solid var(–border);
+}
+.header-left h1 {
+font-size: clamp(22px, 4vw, 36px);
+font-weight: 800; letter-spacing: -0.5px;
+background: linear-gradient(135deg, var(–accent), #a78bfa);
+-webkit-background-clip: text; -webkit-text-fill-color: transparent;
+background-clip: text;
+}
+.header-left p {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 12px; color: var(–muted); margin-top: 6px;
+letter-spacing: 1px; text-transform: uppercase;
+}
+.badge {
+display: inline-block; padding: 4px 10px; border-radius: 4px;
+font-family: ‘JetBrains Mono’, monospace; font-size: 10px;
+font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+background: #00d4ff18; color: var(–accent); border: 1px solid #00d4ff30;
+margin-top: 8px;
+}
+
+/* ── Phase indicators ── */
+.phases {
+display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;
+}
+.phase-btn {
+padding: 8px 18px; border-radius: 6px; border: 1px solid var(–border);
+background: var(–bg2); color: var(–muted);
+font-family: ‘JetBrains Mono’, monospace; font-size: 12px;
+cursor: pointer; transition: all 0.25s; font-weight: 600;
+}
+.phase-btn:hover { border-color: var(–accent); color: var(–accent); }
+.phase-btn.active {
+background: linear-gradient(135deg, #00d4ff18, #7c3aed18);
+border-color: var(–accent); color: var(–accent);
+box-shadow: 0 0 16px #00d4ff20;
+}
+
+/* ── Main grid ── */
+.main-grid {
+display: grid;
+grid-template-columns: 1fr 360px;
+gap: 20px;
+align-items: start;
+}
+@media (max-width: 900px) {
+.main-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Canvas panel ── */
+.canvas-panel {
+background: var(–bg2);
+border: 1px solid var(–border);
+border-radius: 12px;
+overflow: hidden;
+position: relative;
+}
+.canvas-panel canvas {
+display: block; width: 100%;
+}
+
+/* ── Controls bar ── */
+.controls {
+display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+padding: 14px 16px;
+border-top: 1px solid var(–border);
+background: var(–panel);
+}
+.btn {
+padding: 8px 20px; border-radius: 6px; border: none;
+font-family: ‘JetBrains Mono’, monospace; font-size: 12px;
+font-weight: 700; cursor: pointer; transition: all 0.2s;
+letter-spacing: 0.5px;
+}
+.btn-primary {
+background: linear-gradient(135deg, var(–accent), #7c3aed);
+color: #070b14;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px #00d4ff40; }
+.btn-secondary {
+background: transparent; color: var(–muted);
+border: 1px solid var(–border);
+}
+.btn-secondary:hover { border-color: var(–accent); color: var(–accent); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+.speed-control {
+display: flex; align-items: center; gap: 8px; margin-left: auto;
+}
+.speed-control label {
+font-family: ‘JetBrains Mono’, monospace; font-size: 11px; color: var(–muted);
+}
+input[type=range] {
+width: 80px; accent-color: var(–accent);
+}
+
+/* ── Side panel ── */
+.side-panel { display: flex; flex-direction: column; gap: 16px; }
+
+.panel-card {
+background: var(–bg2); border: 1px solid var(–border);
+border-radius: 12px; overflow: hidden;
+}
+.panel-card-header {
+padding: 12px 16px;
+border-bottom: 1px solid var(–border);
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 11px; font-weight: 700;
+color: var(–muted); text-transform: uppercase; letter-spacing: 1.5px;
+background: var(–panel);
+}
+.panel-card-body { padding: 14px 16px; }
+
+/* ── Phase description ── */
+.phase-desc {
+font-size: 13px; line-height: 1.65; color: var(–text);
+font-family: ‘JetBrains Mono’, monospace;
+}
+.phase-desc .label {
+color: var(–accent); font-weight: 700; display: block; margin-bottom: 6px;
+}
+
+/* ── Activation log ── */
+.activation-log {
+max-height: 220px; overflow-y: auto;
+font-family: ‘JetBrains Mono’, monospace; font-size: 11px;
+}
+.activation-log::-webkit-scrollbar { width: 4px; }
+.activation-log::-webkit-scrollbar-track { background: transparent; }
+.activation-log::-webkit-scrollbar-thumb { background: var(–border); border-radius: 2px; }
+
+.log-entry {
+display: flex; justify-content: space-between; align-items: center;
+padding: 5px 0; border-bottom: 1px solid var(–border);
+animation: fadeInLog 0.3s ease;
+}
+.log-entry:last-child { border-bottom: none; }
+@keyframes fadeInLog {
+from { opacity: 0; transform: translateX(-8px); }
+to   { opacity: 1; transform: translateX(0); }
+}
+.log-node { color: var(–text); }
+.log-score { font-weight: 700; }
+.log-score.pass  { color: var(–green); }
+.log-score.fail  { color: var(–red); }
+.log-score.anchor { color: var(–gold); }
+
+/* ── Threshold slider ── */
+.threshold-row {
+display: flex; justify-content: space-between; align-items: center;
+margin-bottom: 10px;
+}
+.threshold-row label {
+font-family: ‘JetBrains Mono’, monospace; font-size: 11px; color: var(–muted);
+}
+.threshold-val {
+font-family: ‘JetBrains Mono’, monospace; font-size: 13px;
+font-weight: 700; color: var(–gold);
+}
+input[type=range].threshold-slider {
+width: 100%; margin-top: 4px; accent-color: var(–gold);
+}
+
+/* ── Legend ── */
+.legend { display: flex; flex-wrap: wrap; gap: 10px; }
+.legend-item {
+display: flex; align-items: center; gap: 6px;
+font-family: ‘JetBrains Mono’, monospace; font-size: 11px; color: var(–muted);
+}
+.legend-dot {
+width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.legend-line {
+width: 20px; height: 2px; flex-shrink: 0; border-radius: 1px;
+}
+
+/* ── Status bar ── */
+.status-bar {
+padding: 10px 16px;
+background: var(–panel);
+border-top: 1px solid var(–border);
+font-family: ‘JetBrains Mono’, monospace; font-size: 11px;
+color: var(–muted); display: flex; gap: 16px; flex-wrap: wrap;
+}
+.status-item span { color: var(–accent); font-weight: 700; }
+
+/* ── Formula box ── */
+.formula {
+background: var(–bg3); border: 1px solid var(–border);
+border-radius: 8px; padding: 12px 14px;
+font-family: ‘JetBrains Mono’, monospace; font-size: 12px;
+color: var(–text); line-height: 1.8;
+}
+.formula .hl { color: var(–accent); font-weight: 700; }
+.formula .hl2 { color: var(–gold); font-weight: 700; }
+.formula .hl3 { color: #a78bfa; font-weight: 700; }
+</style>
+
+</head>
+<body>
+
+<div id="starfield"></div>
+
+<div class="wrapper">
+  <header>
+    <div class="header-left">
+      <h1>Spreading Activation</h1>
+      <p>Context Engine · Knowledge Graph Traversal</p>
+      <div class="badge">Sunday Session</div>
+    </div>
+    <div class="phases">
+      <button class="phase-btn active" data-phase="1">Phase 1 · Anchor Resolution</button>
+      <button class="phase-btn" data-phase="2">Phase 2 · Graph Traversal</button>
+      <button class="phase-btn" data-phase="3">Phase 3 · Materialisation</button>
+    </div>
+  </header>
+
+  <div class="main-grid">
+    <!-- Canvas -->
+    <div>
+      <div class="canvas-panel">
+        <canvas id="graph" height="540"></canvas>
+        <div class="controls">
+          <button class="btn btn-primary" id="playBtn">▶ Run Animation</button>
+          <button class="btn btn-secondary" id="stepBtn">Step →</button>
+          <button class="btn btn-secondary" id="resetBtn">↺ Reset</button>
+          <div class="speed-control">
+            <label>Speed</label>
+            <input type="range" id="speedSlider" min="0.5" max="3" step="0.25" value="1">
+          </div>
+        </div>
+        <div class="status-bar">
+          <div class="status-item">Phase: <span id="statPhase">—</span></div>
+          <div class="status-item">Hop: <span id="statHop">0</span></div>
+          <div class="status-item">Active nodes: <span id="statActive">0</span></div>
+          <div class="status-item">Pruned: <span id="statPruned">0</span></div>
+          <div class="status-item">Tokens: <span id="statTokens">0</span></div>
+        </div>
+      </div>
+    </div>
+
+```
+<!-- Side panel -->
+<div class="side-panel">
+
+  <!-- Phase description -->
+  <div class="panel-card">
+    <div class="panel-card-header">Current Phase</div>
+    <div class="panel-card-body">
+      <div class="phase-desc" id="phaseDesc">
+        <span class="label">Phase 1 — Anchor Resolution</span>
+        The TSO intent embedding is matched against KG node embeddings via nearest-neighbour search. Top-ranked nodes become anchors — the seed concepts from which activation spreads.
+      </div>
+    </div>
+  </div>
+
+  <!-- Formula -->
+  <div class="panel-card">
+    <div class="panel-card-header">Activation Formula</div>
+    <div class="panel-card-body">
+      <div class="formula">
+        <span class="hl">A</span>(node, hop_n) =<br>
+        &nbsp;&nbsp;<span class="hl2">A₀</span>(anchor)<br>
+        &nbsp;&nbsp;× <span class="hl3">∏ edge_weights</span><br>
+        &nbsp;&nbsp;× <span class="hl">decay</span><sup>n</sup><br><br>
+        decay = <span class="hl2">0.90</span> per hop<br>
+        θ_kg = <span id="thetaDisplay" class="hl2">0.40</span> (threshold)
+      </div>
+    </div>
+  </div>
+
+  <!-- Threshold control -->
+  <div class="panel-card">
+    <div class="panel-card-header">Suppression Threshold θ_kg</div>
+    <div class="panel-card-body">
+      <div class="threshold-row">
+        <label>θ_kg value</label>
+        <span class="threshold-val" id="thetaVal">0.40</span>
+      </div>
+      <input type="range" class="threshold-slider" id="thetaSlider"
+             min="0.20" max="0.70" step="0.05" value="0.40">
+    </div>
+  </div>
+
+  <!-- Activation log -->
+  <div class="panel-card">
+    <div class="panel-card-header">Activation Log</div>
+    <div class="panel-card-body" style="padding: 0;">
+      <div class="activation-log" id="activationLog" style="padding: 8px 14px;"></div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="panel-card">
+    <div class="panel-card-header">Legend</div>
+    <div class="panel-card-body">
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#f59e0b; box-shadow: 0 0 6px #f59e0b80;"></div> Anchor node
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#00d4ff; box-shadow: 0 0 6px #00d4ff80;"></div> Activated
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#10b981; box-shadow: 0 0 6px #10b98180;"></div> In payload
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#ef4444; box-shadow: 0 0 6px #ef444480;"></div> Pruned (θ_kg)
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#334155;"></div> Inactive
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background: linear-gradient(90deg, #00d4ff, #7c3aed);"></div> Edge (active)
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background: #1e3255;"></div> Edge (inactive)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// STARFIELD
+// ─────────────────────────────────────────────────────────────────────────────
+(function() {
+  const sf = document.getElementById('starfield');
+  for (let i = 0; i < 120; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const sz = Math.random() * 2 + 0.5;
+    s.style.cssText = `
+      width:${sz}px; height:${sz}px;
+      left:${Math.random()*100}%; top:${Math.random()*100}%;
+      --d:${2+Math.random()*4}s;
+      --delay:${Math.random()*4}s;
+      --min-op:${0.05+Math.random()*0.1};
+      --max-op:${0.3+Math.random()*0.5};
+    `;
+    sf.appendChild(s);
+  }
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GRAPH DATA
+// ─────────────────────────────────────────────────────────────────────────────
+const GRAPH = {
+  nodes: [
+    // Anchors
+    { id: 'PT',   label: 'PaymentTransaction',    type: 'anchor', sim: 0.94, tokens: 95,  x: 0.50, y: 0.18 },
+    { id: 'DTB',  label: 'DuplicateTxnBug',       type: 'anchor', sim: 0.91, tokens: 130, x: 0.20, y: 0.22 },
+    { id: 'PCM',  label: 'PythonCodeModule',       type: 'anchor', sim: 0.88, tokens: 110, x: 0.80, y: 0.22 },
+    // Hop 1
+    { id: 'DC',   label: 'DuplicateCharge',        type: 'node',   tokens: 95,  x: 0.35, y: 0.45 },
+    { id: 'IP',   label: 'IdempotencyPattern',     type: 'node',   tokens: 200, x: 0.65, y: 0.45 },
+    { id: 'CB',   label: 'ConcurrencyBug',         type: 'node',   tokens: 120, x: 0.15, y: 0.50 },
+    { id: 'PEP8', label: 'PEP8StyleGuide',         type: 'node',   tokens: 310, x: 0.85, y: 0.50 },
+    // Hop 2
+    { id: 'RP',   label: 'RefundPolicy',           type: 'node',   tokens: 180, x: 0.28, y: 0.72 },
+    { id: 'DLS',  label: 'DatabaseLockStrategy',   type: 'node',   tokens: 250, x: 0.58, y: 0.72 },
+    { id: 'TD',   label: 'ThreadingDocs',          type: 'node',   tokens: 90,  x: 0.08, y: 0.76 },
+    { id: 'SQ',   label: 'SQLInjectionPattern',    type: 'node',   tokens: 160, x: 0.78, y: 0.74 },
+    // Hop 3
+    { id: 'BS',   label: 'BankSettlementRule',     type: 'node',   tokens: 220, x: 0.42, y: 0.90 },
+    { id: 'TXL',  label: 'TransactionLockTimeout', type: 'node',   tokens: 140, x: 0.68, y: 0.90 },
+  ],
+  edges: [
+    // From anchors — hop 1
+    { from: 'PT',  to: 'DC',   rel: 'causes',   w: 0.85, hop: 1 },
+    { from: 'PT',  to: 'IP',   rel: 'requires', w: 0.80, hop: 1 },
+    { from: 'DTB', to: 'CB',   rel: 'is-a',     w: 0.95, hop: 1 },
+    { from: 'PCM', to: 'PEP8', rel: 'requires', w: 0.80, hop: 1 },
+    // Hop 2
+    { from: 'DC',  to: 'RP',   rel: 'requires', w: 0.80, hop: 2 },
+    { from: 'IP',  to: 'DLS',  rel: 'part-of',  w: 0.75, hop: 2 },
+    { from: 'CB',  to: 'TD',   rel: 'related-to',w:0.40, hop: 2 },
+    { from: 'PEP8',to: 'SQ',   rel: 'triggers', w: 0.70, hop: 2 },
+    // Hop 3
+    { from: 'RP',  to: 'BS',   rel: 'governed-by',w:0.75,hop: 3 },
+    { from: 'DLS', to: 'TXL',  rel: 'requires', w: 0.80, hop: 3 },
+  ]
+};
+
+const DECAY = 0.90;
+let THETA = 0.40;
+const TOKEN_BUDGET = 950;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDGE WEIGHT COLOURS
+// ─────────────────────────────────────────────────────────────────────────────
+function edgeColor(w) {
+  if (w >= 0.90) return '#f59e0b';
+  if (w >= 0.80) return '#00d4ff';
+  if (w >= 0.70) return '#a78bfa';
+  return '#ef4444';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPUTE ACTIVATION SCORES
+// ─────────────────────────────────────────────────────────────────────────────
+function computeActivations() {
+  const scores = {};
+  // Anchors
+  GRAPH.nodes.filter(n => n.type === 'anchor').forEach(n => {
+    scores[n.id] = n.sim;
+  });
+  // Traverse by hop
+  for (let hop = 1; hop <= 3; hop++) {
+    GRAPH.edges.filter(e => e.hop === hop).forEach(e => {
+      const parentScore = scores[e.from] || 0;
+      scores[e.to] = parentScore * e.w * Math.pow(DECAY, hop);
+    });
+  }
+  return scores;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CANVAS ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('graph');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  W = rect.width;
+  H = 540;
+  canvas.width = W;
+  canvas.height = H;
+  canvas.style.height = H + 'px';
+}
+resize();
+window.addEventListener('resize', () => { resize(); drawFrame(); });
+
+function nodePos(node) {
+  return { x: node.x * W, y: node.y * H };
+}
+
+// ── Animation state ──────────────────────────────────────────────────────────
+let state = {
+  phase: 0,          // 0=idle, 1=anchor, 2=traversal, 3=materialise
+  currentHop: 0,
+  activatedEdges: new Set(),
+  activatedNodes: new Set(),
+  prunedNodes: new Set(),
+  payloadNodes: new Set(),
+  glowAnimations: {},   // nodeId → {start, intensity}
+  pulseAnimations: {},  // edgeKey → {start, progress}
+  scores: {},
+  animating: false,
+  stepQueue: [],
+  rafId: null,
+  lastTime: 0,
+  speedMultiplier: 1,
+};
+
+function resetState() {
+  cancelAnimationFrame(state.rafId);
+  state = {
+    phase: 0, currentHop: 0,
+    activatedEdges: new Set(), activatedNodes: new Set(),
+    prunedNodes: new Set(), payloadNodes: new Set(),
+    glowAnimations: {}, pulseAnimations: {},
+    scores: {}, animating: false, stepQueue: [],
+    rafId: null, lastTime: 0, speedMultiplier: state.speedMultiplier
+  };
+  clearLog();
+  updateStats();
+  drawFrame();
+  document.getElementById('playBtn').disabled = false;
+  document.getElementById('stepBtn').disabled = false;
+}
+
+// ── Draw helpers ──────────────────────────────────────────────────────────────
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `${r},${g},${b}`;
+}
+
+function drawEdge(edge, activated, pulseFraction, now) {
+  const fromNode = GRAPH.nodes.find(n => n.id === edge.from);
+  const toNode   = GRAPH.nodes.find(n => n.id === edge.to);
+  const fp = nodePos(fromNode), tp = nodePos(toNode);
+
+  const col = activated ? edgeColor(edge.w) : '#1e3255';
+  const alpha = activated ? 0.85 : 0.3;
+  const lw = activated ? 2.5 : 1;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = lw;
+
+  if (activated) {
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 8;
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(fp.x, fp.y);
+  ctx.lineTo(tp.x, tp.y);
+  ctx.stroke();
+
+  // Draw edge weight label
+  if (activated) {
+    const mx = (fp.x + tp.x) / 2;
+    const my = (fp.y + tp.y) / 2;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = col;
+    ctx.globalAlpha = 0.9;
+    ctx.font = "bold 10px 'JetBrains Mono'";
+    ctx.textAlign = 'center';
+    ctx.fillText('w=' + edge.w.toFixed(2), mx + 6, my - 4);
+    // relation type
+    ctx.font = "9px 'JetBrains Mono'";
+    ctx.globalAlpha = 0.6;
+    ctx.fillText(edge.rel, mx + 6, my + 8);
+  }
+
+  // Pulse particle along edge
+  if (pulseFraction !== null && pulseFraction >= 0 && pulseFraction <= 1) {
+    const px = fp.x + (tp.x - fp.x) * pulseFraction;
+    const py = fp.y + (tp.y - fp.y) * pulseFraction;
+    ctx.globalAlpha = 1;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Arrow tip
+  if (activated) {
+    const angle = Math.atan2(tp.y - fp.y, tp.x - fp.x);
+    const arrowLen = 10;
+    const ex = tp.x - Math.cos(angle) * 22;
+    const ey = tp.y - Math.sin(angle) * 22;
+    ctx.globalAlpha = 0.8;
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - arrowLen * Math.cos(angle - 0.4), ey - arrowLen * Math.sin(angle - 0.4));
+    ctx.lineTo(ex - arrowLen * Math.cos(angle + 0.4), ey - arrowLen * Math.sin(angle + 0.4));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawNode(node, now) {
+  const { x, y } = nodePos(node);
+  const isAnchor  = node.type === 'anchor';
+  const activated = state.activatedNodes.has(node.id);
+  const pruned    = state.prunedNodes.has(node.id);
+  const inPayload = state.payloadNodes.has(node.id);
+  const glow      = state.glowAnimations[node.id];
+
+  // Glow pulse
+  let glowIntensity = 0;
+  if (glow) {
+    const elapsed = (now - glow.start) / 1000;
+    glowIntensity = Math.max(0, 1 - elapsed * 0.8) * glow.intensity;
+  }
+
+  let fillColor, strokeColor, textColor, radius;
+  radius = isAnchor ? 26 : 20;
+
+  if (pruned) {
+    fillColor   = '#1a0a0a';
+    strokeColor = '#ef4444';
+    textColor   = '#ef4444';
+  } else if (inPayload) {
+    fillColor   = '#052015';
+    strokeColor = '#10b981';
+    textColor   = '#10b981';
+  } else if (isAnchor && state.phase >= 1) {
+    fillColor   = '#1a1200';
+    strokeColor = '#f59e0b';
+    textColor   = '#f59e0b';
+  } else if (activated) {
+    fillColor   = '#001a2a';
+    strokeColor = '#00d4ff';
+    textColor   = '#00d4ff';
+  } else {
+    fillColor   = '#0d1424';
+    strokeColor = '#1e3255';
+    textColor   = '#334155';
+  }
+
+  ctx.save();
+
+  // Outer glow ring
+  if (glowIntensity > 0.05) {
+    ctx.shadowColor = strokeColor;
+    ctx.shadowBlur  = 30 * glowIntensity;
+    ctx.strokeStyle = strokeColor;
+    ctx.globalAlpha = glowIntensity * 0.6;
+    ctx.lineWidth   = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // Steady glow for activated/anchors
+  if ((activated || isAnchor && state.phase >= 1) && !pruned) {
+    ctx.shadowColor = strokeColor;
+    ctx.shadowBlur  = 18;
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle   = strokeColor;
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Node circle
+  ctx.globalAlpha = 1;
+  ctx.shadowColor = strokeColor;
+  ctx.shadowBlur  = activated || isAnchor ? 12 : 2;
+  ctx.fillStyle   = fillColor;
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth   = isAnchor ? 2.5 : 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+
+  // Score badge
+  const score = state.scores[node.id];
+  if (score !== undefined) {
+    const scoreText = score.toFixed(3);
+    const badgeY = y + radius + 13;
+    ctx.font = "bold 10px 'JetBrains Mono'";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = pruned ? '#ef4444' : (inPayload ? '#10b981' : (isAnchor ? '#f59e0b' : '#00d4ff'));
+    ctx.globalAlpha = 0.9;
+    ctx.fillText('A=' + scoreText, x, badgeY);
+  }
+
+  // Token badge (in payload phase)
+  if (inPayload && state.phase === 3) {
+    ctx.font = "9px 'JetBrains Mono'";
+    ctx.fillStyle = '#10b981';
+    ctx.globalAlpha = 0.7;
+    ctx.fillText(node.tokens + 't', x, y + radius + 24);
+  }
+
+  // Node label
+  ctx.font = `${isAnchor ? 'bold ' : ''}11px 'JetBrains Mono'`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = textColor;
+  ctx.globalAlpha = activated || isAnchor ? 1 : 0.35;
+  // Break label at camelCase for readability
+  const label = node.label;
+  const mid = Math.floor(label.length / 2);
+  // find a good break point near middle
+  let breakAt = -1;
+  for (let i = mid; i < label.length; i++) {
+    if (label[i] === label[i].toUpperCase() && i > 0) { breakAt = i; break; }
+  }
+  if (breakAt > 0 && label.length > 12) {
+    ctx.fillText(label.slice(0, breakAt), x, y - 3);
+    ctx.fillText(label.slice(breakAt), x, y + 11);
+  } else {
+    ctx.fillText(label, x, y + 4);
+  }
+
+  ctx.restore();
+}
+
+function drawFrame(now = 0) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Background gradient
+  const bg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H));
+  bg.addColorStop(0, '#0d1630');
+  bg.addColorStop(1, '#070b14');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw edges first
+  GRAPH.edges.forEach(edge => {
+    const key = edge.from + '->' + edge.to;
+    const activated = state.activatedEdges.has(key);
+    const pulse = state.pulseAnimations[key];
+    let pulseFraction = null;
+    if (pulse) {
+      const elapsed = (now - pulse.start) / 1000 * state.speedMultiplier;
+      pulseFraction = Math.min(1, elapsed / 0.8);
+      if (pulseFraction >= 1) delete state.pulseAnimations[key];
+    }
+    drawEdge(edge, activated, pulseFraction, now);
+  });
+
+  // Draw nodes
+  GRAPH.nodes.forEach(node => drawNode(node, now));
+
+  // Phase 3 overlay — token budget bar
+  if (state.phase === 3) {
+    drawBudgetBar();
+  }
+
+  // TSO box during phase 1
+  if (state.phase >= 1) {
+    drawTSOBox();
+  }
+}
+
+function drawTSOBox() {
+  const bx = 12, by = 12, bw = 220, bh = 64;
+  ctx.save();
+  ctx.fillStyle = '#0a1020';
+  ctx.strokeStyle = '#f59e0b40';
+  ctx.lineWidth = 1;
+  ctx.shadowColor = '#f59e0b';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, bh, 8);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.font = "bold 10px 'JetBrains Mono'";
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillText('TSO INTENT', bx + 10, by + 18);
+  ctx.font = "10px 'JetBrains Mono'";
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText('task: bug_investigation', bx + 10, by + 34);
+  ctx.fillText('domain: payment · Python', bx + 10, by + 50);
+  ctx.restore();
+}
+
+function drawBudgetBar() {
+  const totalTokens = [...state.payloadNodes].reduce((sum, id) => {
+    const node = GRAPH.nodes.find(n => n.id === id);
+    return sum + (node ? node.tokens : 0);
+  }, 0);
+  const pct = Math.min(1, totalTokens / TOKEN_BUDGET);
+  const barW = Math.min(300, W - 32);
+  const bx = W - barW - 16, by = H - 48;
+
+  ctx.save();
+  ctx.fillStyle = '#0a1020';
+  ctx.strokeStyle = '#10b98140';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, barW, 36, 6);
+  ctx.fill(); ctx.stroke();
+
+  // Bar fill
+  const fillColor = pct > 0.9 ? '#f59e0b' : '#10b981';
+  const grad = ctx.createLinearGradient(bx, 0, bx + barW * pct, 0);
+  grad.addColorStop(0, fillColor + '40');
+  grad.addColorStop(1, fillColor);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(bx + 4, by + 4, (barW - 8) * pct, 12, 3);
+  ctx.fill();
+
+  ctx.font = "bold 10px 'JetBrains Mono'";
+  ctx.fillStyle = fillColor;
+  ctx.textAlign = 'left';
+  ctx.fillText(`TOKEN BUDGET: ${totalTokens} / ${TOKEN_BUDGET}`, bx + 6, by + 30);
+  ctx.restore();
+}
+
+// ── Animation loop ────────────────────────────────────────────────────────────
+function animate(now) {
+  drawFrame(now);
+  state.rafId = requestAnimationFrame(animate);
+}
+state.rafId = requestAnimationFrame(animate);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP LOGIC
+// ─────────────────────────────────────────────────────────────────────────────
+function buildStepQueue() {
+  const steps = [];
+  const scores = computeActivations();
+
+  // Phase 1 — anchors
+  steps.push({ type: 'phase', phase: 1 });
+  GRAPH.nodes.filter(n => n.type === 'anchor').forEach(n => {
+    steps.push({ type: 'anchor', nodeId: n.id, score: n.sim });
+  });
+
+  // Phase 2 — traversal by hop
+  steps.push({ type: 'phase', phase: 2 });
+  for (let hop = 1; hop <= 3; hop++) {
+    steps.push({ type: 'hop', hop });
+    GRAPH.edges.filter(e => e.hop === hop).forEach(edge => {
+      const score = scores[edge.to];
+      const pruned = score < THETA;
+      steps.push({ type: 'traverse', edge, score, pruned });
+    });
+  }
+
+  // Phase 3 — materialisation
+  steps.push({ type: 'phase', phase: 3 });
+  // Sort surviving nodes by activation score descending
+  const survivors = Object.entries(scores)
+    .filter(([id, s]) => s >= THETA)
+    .sort((a, b) => b[1] - a[1]);
+
+  let cumulativeTokens = 0;
+  survivors.forEach(([id, score]) => {
+    const node = GRAPH.nodes.find(n => n.id === id);
+    const newTotal = cumulativeTokens + node.tokens;
+    const fits = newTotal <= TOKEN_BUDGET;
+    if (fits) cumulativeTokens = newTotal;
+    steps.push({ type: 'materialise', nodeId: id, score, tokens: node.tokens, fits, cumTokens: cumulativeTokens });
+  });
+
+  return steps;
+}
+
+function executeStep(step) {
+  if (!step) return;
+
+  if (step.type === 'phase') {
+    state.phase = step.phase;
+    updatePhaseDesc(step.phase);
+    updatePhaseButtons(step.phase);
+    return;
+  }
+
+  if (step.type === 'anchor') {
+    state.activatedNodes.add(step.nodeId);
+    state.scores[step.nodeId] = step.score;
+    state.glowAnimations[step.nodeId] = { start: performance.now(), intensity: 1.5 };
+    logEntry(step.nodeId, step.score, 'anchor');
+    updateStats();
+    return;
+  }
+
+  if (step.type === 'hop') {
+    state.currentHop = step.hop;
+    updateStats();
+    return;
+  }
+
+  if (step.type === 'traverse') {
+    const key = step.edge.from + '->' + step.edge.to;
+    state.activatedEdges.add(key);
+    state.pulseAnimations[key] = { start: performance.now() };
+    state.scores[step.edge.to] = step.score;
+    if (step.pruned) {
+      state.prunedNodes.add(step.edge.to);
+      logEntry(step.edge.to, step.score, 'fail');
+    } else {
+      state.activatedNodes.add(step.edge.to);
+      state.glowAnimations[step.edge.to] = { start: performance.now(), intensity: 1 };
+      logEntry(step.edge.to, step.score, 'pass');
+    }
+    updateStats();
+    return;
+  }
+
+  if (step.type === 'materialise') {
+    if (step.fits) {
+      state.payloadNodes.add(step.nodeId);
+      state.glowAnimations[step.nodeId] = { start: performance.now(), intensity: 2 };
+      logEntry(step.nodeId + ' (+' + step.tokens + 't)', step.score, 'pass');
+    } else {
+      logEntry(step.nodeId + ' [BUDGET]', step.score, 'fail');
+    }
+    updateStats();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTO-PLAY
+// ─────────────────────────────────────────────────────────────────────────────
+let autoPlayInterval = null;
+
+function runAutoPlay() {
+  if (autoPlayInterval) clearInterval(autoPlayInterval);
+  const delay = Math.round(900 / state.speedMultiplier);
+  autoPlayInterval = setInterval(() => {
+    if (state.stepQueue.length === 0) {
+      clearInterval(autoPlayInterval);
+      autoPlayInterval = null;
+      state.animating = false;
+      document.getElementById('playBtn').textContent = '▶ Run Animation';
+      document.getElementById('playBtn').disabled = false;
+      document.getElementById('stepBtn').disabled = false;
+      return;
+    }
+    executeStep(state.stepQueue.shift());
+  }, delay);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI UPDATES
+// ─────────────────────────────────────────────────────────────────────────────
+const PHASE_DESCS = {
+  1: {
+    label: 'Phase 1 — Anchor Resolution',
+    text: 'The TSO intent embedding is matched against KG node embeddings via nearest-neighbour search. Top-ranked nodes become anchors — the seed concepts. Their similarity score becomes A₀, the initial activation energy.'
+  },
+  2: {
+    label: 'Phase 2 — Weighted Graph Traversal',
+    text: 'Activation propagates outward from anchor nodes. Each hop applies: A = A₀ × ∏ edge_weights × decay^n. Nodes falling below θ_kg are pruned (red). The traversal self-terminates when all paths drop below threshold.'
+  },
+  3: {
+    label: 'Phase 3 — Subgraph Materialisation',
+    text: 'Surviving nodes are ranked by activation score and filled into the token budget greedily. Edges between surviving nodes are restored. The result is a structured, relational context payload — not a flat list.'
+  }
+};
+
+function updatePhaseDesc(phase) {
+  const desc = PHASE_DESCS[phase];
+  if (!desc) return;
+  const el = document.getElementById('phaseDesc');
+  el.innerHTML = `<span class="label">${desc.label}</span>${desc.text}`;
+}
+
+function updatePhaseButtons(phase) {
+  document.querySelectorAll('.phase-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.phase) === phase);
+  });
+}
+
+function updateStats() {
+  document.getElementById('statPhase').textContent =
+    state.phase === 0 ? '—' : ['—','Anchor','Traversal','Materialise'][state.phase];
+  document.getElementById('statHop').textContent = state.currentHop || '—';
+  document.getElementById('statActive').textContent = state.activatedNodes.size;
+  document.getElementById('statPruned').textContent = state.prunedNodes.size;
+  const tokens = [...state.payloadNodes].reduce((s, id) => {
+    const n = GRAPH.nodes.find(n => n.id === id);
+    return s + (n ? n.tokens : 0);
+  }, 0);
+  document.getElementById('statTokens').textContent = tokens > 0 ? tokens + ' / ' + TOKEN_BUDGET : '—';
+}
+
+function logEntry(label, score, type) {
+  const log = document.getElementById('activationLog');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  const scoreStr = score.toFixed(3);
+  let scoreClass = type === 'anchor' ? 'anchor' : (type === 'pass' ? 'pass' : 'fail');
+  let icon = type === 'anchor' ? '⚓' : (type === 'pass' ? '✓' : '✗');
+  entry.innerHTML = `
+    <span class="log-node">${icon} ${label}</span>
+    <span class="log-score ${scoreClass}">${scoreStr}</span>
+  `;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('activationLog').innerHTML = '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENT HANDLERS
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('playBtn').addEventListener('click', function() {
+  if (state.animating) {
+    // Pause
+    if (autoPlayInterval) { clearInterval(autoPlayInterval); autoPlayInterval = null; }
+    state.animating = false;
+    this.textContent = '▶ Resume';
+    return;
+  }
+  if (state.stepQueue.length === 0 && state.phase === 0) {
+    // Fresh start
+    state.stepQueue = buildStepQueue();
+  }
+  if (state.stepQueue.length === 0) {
+    // Done — reset
+    resetState();
+    return;
+  }
+  state.animating = true;
+  this.textContent = '⏸ Pause';
+  document.getElementById('stepBtn').disabled = true;
+  runAutoPlay();
+});
+
+document.getElementById('stepBtn').addEventListener('click', function() {
+  if (state.stepQueue.length === 0 && state.phase === 0) {
+    state.stepQueue = buildStepQueue();
+  }
+  if (state.stepQueue.length > 0) {
+    executeStep(state.stepQueue.shift());
+  }
+});
+
+document.getElementById('resetBtn').addEventListener('click', function() {
+  if (autoPlayInterval) { clearInterval(autoPlayInterval); autoPlayInterval = null; }
+  resetState();
+  document.getElementById('playBtn').textContent = '▶ Run Animation';
+});
+
+document.getElementById('speedSlider').addEventListener('input', function() {
+  state.speedMultiplier = parseFloat(this.value);
+  if (autoPlayInterval && state.animating) {
+    clearInterval(autoPlayInterval);
+    runAutoPlay();
+  }
+});
+
+document.getElementById('thetaSlider').addEventListener('input', function() {
+  THETA = parseFloat(this.value);
+  document.getElementById('thetaVal').textContent = THETA.toFixed(2);
+  document.getElementById('thetaDisplay').textContent = THETA.toFixed(2);
+  // Recompute if already traversed
+  if (state.phase >= 2) {
+    // Recompute pruned/activated based on new theta
+    const scores = computeActivations();
+    state.prunedNodes.clear();
+    GRAPH.nodes.filter(n => n.type !== 'anchor').forEach(n => {
+      if (scores[n.id] !== undefined) {
+        if (scores[n.id] < THETA) {
+          state.prunedNodes.add(n.id);
+          state.activatedNodes.delete(n.id);
+        } else {
+          state.activatedNodes.add(n.id);
+          state.prunedNodes.delete(n.id);
+        }
+      }
+    });
+    updateStats();
+  }
+});
+
+document.querySelectorAll('.phase-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    // Jump to that phase description
+    const phase = parseInt(this.dataset.phase);
+    updatePhaseDesc(phase);
+    document.querySelectorAll('.phase-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+// Initial draw
+drawFrame();
+updateStats();
+</script>
+
+</body>
+</html>
