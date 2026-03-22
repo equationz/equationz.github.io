@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mechanism 1 — Attentional Gating</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600;700&family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #06080f;
+  --bg2:      #0b1020;
+  --bg3:      #101828;
+  --panel:    #080e1a;
+  --border:   #162040;
+  --pass:     #00ff9d;
+  --block:    #ff3366;
+  --pending:  #f0b429;
+  --neutral:  #3a5080;
+  --text:     #cdd9f0;
+  --muted:    #4a6080;
+  --dim:      #1a2840;
+  --thalamus: #7b61ff;
+}
+
+- { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘Rajdhani’, sans-serif;
+min-height: 100vh;
+overflow-x: hidden;
+}
+
+/* ── Scanline overlay ── */
+body::before {
+content: ‘’;
+position: fixed; inset: 0; pointer-events: none; z-index: 100;
+background: repeating-linear-gradient(
+0deg,
+transparent,
+transparent 2px,
+rgba(0,0,0,0.04) 2px,
+rgba(0,0,0,0.04) 4px
+);
+}
+
+/* ── Hex grid background ── */
+#hexbg {
+position: fixed; inset: 0; pointer-events: none; z-index: 0;
+opacity: 0.04;
+}
+
+.wrapper {
+position: relative; z-index: 1;
+max-width: 1280px; margin: 0 auto;
+padding: 28px 20px;
+}
+
+/* ── Header ── */
+header {
+display: grid;
+grid-template-columns: 1fr auto;
+align-items: start; gap: 16px;
+margin-bottom: 28px;
+padding-bottom: 20px;
+border-bottom: 1px solid var(–border);
+}
+.mech-tag {
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 11px; color: var(–thalamus);
+letter-spacing: 3px; text-transform: uppercase;
+margin-bottom: 6px;
+}
+h1 {
+font-family: ‘Bebas Neue’, sans-serif;
+font-size: clamp(32px, 6vw, 56px);
+letter-spacing: 2px; line-height: 1;
+color: var(–text);
+}
+h1 span { color: var(–pass); }
+.subtitle {
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 11px; color: var(–muted);
+margin-top: 8px; letter-spacing: 1px;
+}
+.header-badges { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+.badge {
+padding: 5px 12px; border-radius: 3px;
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+font-weight: 600;
+}
+.badge-thal  { background: #7b61ff18; color: var(–thalamus); border: 1px solid #7b61ff30; }
+.badge-pass  { background: #00ff9d12; color: var(–pass);     border: 1px solid #00ff9d25; }
+.badge-block { background: #ff336612; color: var(–block);    border: 1px solid #ff336625; }
+
+/* ── Main grid ── */
+.main {
+display: grid;
+grid-template-columns: 1fr 320px;
+gap: 18px;
+}
+@media(max-width:900px) { .main { grid-template-columns:1fr; } }
+
+/* ── Stage ── */
+.stage {
+background: var(–bg2);
+border: 1px solid var(–border);
+border-radius: 10px;
+overflow: hidden;
+}
+canvas { display: block; width: 100%; }
+
+/* ── Control bar ── */
+.ctrl-bar {
+display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+padding: 12px 14px;
+border-top: 1px solid var(–border);
+background: var(–panel);
+}
+.btn {
+padding: 7px 18px; border-radius: 4px; border: none;
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 11px; font-weight: 700;
+letter-spacing: 1px; text-transform: uppercase;
+cursor: pointer; transition: all .2s;
+}
+.btn-run {
+background: var(–pass); color: #06080f;
+}
+.btn-run:hover { box-shadow: 0 0 18px #00ff9d60; transform: translateY(-1px); }
+.btn-run.paused { background: var(–pending); color: #06080f; }
+.btn-step { background: transparent; color: var(–muted); border: 1px solid var(–border); }
+.btn-step:hover { border-color: var(–thalamus); color: var(–thalamus); }
+.btn-reset { background: transparent; color: var(–muted); border: 1px solid var(–border); }
+.btn-reset:hover { border-color: var(–block); color: var(–block); }
+.btn:disabled { opacity: .35; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+.ctrl-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.ctrl-label { font-family: ‘IBM Plex Mono’, monospace; font-size: 10px; color: var(–muted); letter-spacing: 1px; }
+input[type=range] { width: 80px; accent-color: var(–pass); }
+
+/* ── Status row ── */
+.status-row {
+display: flex; gap: 20px; flex-wrap: wrap;
+padding: 8px 14px;
+border-top: 1px solid var(–border);
+background: var(–panel);
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 10px; color: var(–muted);
+}
+.stat em { color: var(–pass); font-style: normal; font-weight: 700; }
+.stat.blocked em { color: var(–block); }
+.stat.pending em { color: var(–pending); }
+.stat.thal em { color: var(–thalamus); }
+
+/* ── Side panel ── */
+.side { display: flex; flex-direction: column; gap: 14px; }
+
+.card {
+background: var(–bg2);
+border: 1px solid var(–border);
+border-radius: 10px; overflow: hidden;
+}
+.card-head {
+padding: 9px 14px;
+border-bottom: 1px solid var(–border);
+background: var(–panel);
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 10px; font-weight: 700;
+color: var(–muted); text-transform: uppercase; letter-spacing: 2px;
+}
+.card-body { padding: 12px 14px; }
+
+/* ── Theta control ── */
+.theta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.theta-label { font-family: ‘IBM Plex Mono’, monospace; font-size: 11px; color: var(–muted); }
+.theta-val { font-family: ‘IBM Plex Mono’, monospace; font-size: 15px; font-weight: 700; color: var(–pending); }
+input.theta-slider { width: 100%; accent-color: var(–pending); margin-top: 2px; }
+
+/* ── Signal log ── */
+.sig-log {
+max-height: 200px; overflow-y: auto;
+font-family: ‘IBM Plex Mono’, monospace; font-size: 10px;
+}
+.sig-log::-webkit-scrollbar { width: 3px; }
+.sig-log::-webkit-scrollbar-thumb { background: var(–border); }
+.sig-entry {
+display: flex; justify-content: space-between;
+padding: 4px 0; border-bottom: 1px solid var(–dim);
+animation: slideIn .25s ease;
+}
+.sig-entry:last-child { border-bottom: none; }
+@keyframes slideIn { from { opacity:0; transform: translateX(-6px); } to { opacity:1; transform: none; } }
+.sig-name { color: var(–text); }
+.sig-score { font-weight: 700; }
+.sig-score.pass   { color: var(–pass); }
+.sig-score.block  { color: var(–block); }
+.sig-score.gate   { color: var(–thalamus); }
+
+/* ── Concept description ── */
+.concept-text {
+font-size: 13px; line-height: 1.7; color: var(–text);
+font-family: ‘IBM Plex Mono’, monospace;
+}
+.concept-text .hl { color: var(–pass); font-weight: 700; }
+.concept-text .hl2 { color: var(–thalamus); font-weight: 700; }
+.concept-text .hl3 { color: var(–block); font-weight: 700; }
+
+/* ── Formula ── */
+.formula {
+background: var(–bg3); border: 1px solid var(–border);
+border-radius: 6px; padding: 10px 12px;
+font-family: ‘IBM Plex Mono’, monospace; font-size: 11px;
+color: var(–text); line-height: 2;
+}
+.formula .v1 { color: var(–pass); font-weight:700; }
+.formula .v2 { color: var(–pending); font-weight:700; }
+.formula .v3 { color: var(–block); font-weight:700; }
+.formula .v4 { color: var(–thalamus); font-weight:700; }
+
+/* ── Legend ── */
+.legend { display: flex; flex-direction: column; gap: 7px; }
+.leg-item { display: flex; align-items: center; gap: 8px; font-family: ‘IBM Plex Mono’, monospace; font-size: 10px; color: var(–muted); }
+.leg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.leg-rect { width:14px; height:3px; border-radius:2px; flex-shrink:0; }
+</style>
+
+</head>
+<body>
+
+<canvas id="hexbg"></canvas>
+
+<div class="wrapper">
+  <header>
+    <div>
+      <div class="mech-tag">Context Engine · Sunday Session</div>
+      <h1>Attentional <span>Gating</span></h1>
+      <div class="subtitle">MECHANISM 01 · THALAMO-CORTICAL FILTER · RELEVANCE SCORING</div>
+    </div>
+    <div class="header-badges">
+      <div class="badge badge-thal">Thalamus</div>
+      <div class="badge badge-pass">Pass Gate</div>
+      <div class="badge badge-block">No-Go Gate</div>
+    </div>
+  </header>
+
+  <div class="main">
+    <div>
+      <div class="stage">
+        <canvas id="main"></canvas>
+        <div class="ctrl-bar">
+          <button class="btn btn-run" id="runBtn">▶ Run</button>
+          <button class="btn btn-step" id="stepBtn">Step</button>
+          <button class="btn btn-reset" id="resetBtn">↺ Reset</button>
+          <div class="ctrl-right">
+            <span class="ctrl-label">Speed</span>
+            <input type="range" id="speedSlider" min="0.4" max="3" step="0.2" value="1">
+          </div>
+        </div>
+        <div class="status-row">
+          <div class="stat thal">Thalamus: <em id="stTheta">—</em></div>
+          <div class="stat">Signals In: <em id="stIn">0</em></div>
+          <div class="stat">Passed: <em id="stPass">0</em></div>
+          <div class="stat blocked">Suppressed: <em id="stBlock">0</em></div>
+          <div class="stat pending">Queued: <em id="stQueue">0</em></div>
+        </div>
+      </div>
+    </div>
+
+```
+<div class="side">
+
+  <!-- Concept -->
+  <div class="card">
+    <div class="card-head">What Is Attentional Gating?</div>
+    <div class="card-body">
+      <div class="concept-text" id="conceptDesc">
+        The <span class="hl2">thalamus</span> acts as the brain's sensory gateway. Incoming signals are scored for relevance — only those above threshold <span class="hl">θ</span> pass through to working memory.<br><br>
+        Signals below <span class="hl">θ</span> are <span class="hl3">suppressed</span> — not discarded forever, but blocked from consuming working memory capacity for the current task.
+      </div>
+    </div>
+  </div>
+
+  <!-- Theta -->
+  <div class="card">
+    <div class="card-head">Gate Threshold θ_kg</div>
+    <div class="card-body">
+      <div class="theta-row">
+        <span class="theta-label">Current θ</span>
+        <span class="theta-val" id="thetaVal">0.40</span>
+      </div>
+      <input type="range" class="theta-slider" id="thetaSlider" min="0.15" max="0.75" step="0.05" value="0.40">
+      <div style="margin-top:10px;">
+        <div class="formula">
+          Score <span class="v1">≥ θ</span> → <span class="v1">PASS</span> → cortex<br>
+          Score <span class="v3">&lt; θ</span> → <span class="v3">SUPPRESS</span> → blocked<br><br>
+          θ = <span class="v2" id="fTheta">0.40</span>
+          &nbsp;(drag slider to adjust)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Signal log -->
+  <div class="card">
+    <div class="card-head">Signal Log</div>
+    <div class="card-body" style="padding:0">
+      <div class="sig-log" id="sigLog" style="padding:8px 12px;"></div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="card">
+    <div class="card-head">Legend</div>
+    <div class="card-body">
+      <div class="legend">
+        <div class="leg-item"><div class="leg-dot" style="background:#7b61ff; box-shadow:0 0 6px #7b61ff80;"></div>Thalamus gate</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#f0b429; box-shadow:0 0 6px #f0b42980;"></div>Incoming signal</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#00ff9d; box-shadow:0 0 6px #00ff9d80;"></div>Passed — enters cortex</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#ff3366; box-shadow:0 0 6px #ff336680;"></div>Suppressed — blocked</div>
+        <div class="leg-item"><div class="leg-rect" style="background:linear-gradient(90deg,#00ff9d,#7b61ff);"></div>Pass lane</div>
+        <div class="leg-item"><div class="leg-rect" style="background:linear-gradient(90deg,#ff3366,#7b61ff);"></div>Suppress lane</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+```
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// HEX BACKGROUND
+// ─────────────────────────────────────────────────────────────────────────────
+(function() {
+  const c = document.getElementById('hexbg');
+  const cx = c.getContext('2d');
+  function draw() {
+    c.width = window.innerWidth; c.height = window.innerHeight;
+    const sz = 36, rows = Math.ceil(c.height/(sz*1.5))+2;
+    const cols = Math.ceil(c.width/(sz*Math.sqrt(3)))+2;
+    cx.strokeStyle = '#ffffff'; cx.lineWidth = 0.5;
+    for (let r=0; r<rows; r++) {
+      for (let cl=0; cl<cols; cl++) {
+        const x = cl * sz * Math.sqrt(3) + (r%2)*sz*Math.sqrt(3)/2;
+        const y = r * sz * 1.5;
+        cx.beginPath();
+        for (let i=0;i<6;i++) {
+          const ang = Math.PI/180*(60*i-30);
+          const px = x + sz*Math.cos(ang), py = y + sz*Math.sin(ang);
+          i===0 ? cx.moveTo(px,py) : cx.lineTo(px,py);
+        }
+        cx.closePath(); cx.stroke();
+      }
+    }
+  }
+  draw(); window.addEventListener('resize', draw);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SIGNAL DATA
+// The scene has: a stream of incoming signals on the left,
+// a thalamus gate in the centre, and two output channels on the right:
+// PASS (top) → cortex / working memory, SUPPRESS (bottom) → blocked.
+// ─────────────────────────────────────────────────────────────────────────────
+const SIGNALS_DEF = [
+  { id:'S1',  label:'Cardiac Symptoms',     domain:'Medical',     score: 0.91 },
+  { id:'S2',  label:'Dermatology Info',      domain:'Off-topic',   score: 0.12 },
+  { id:'S3',  label:'ECG Protocols',         domain:'Medical',     score: 0.86 },
+  { id:'S4',  label:'Paediatrics Data',      domain:'Off-topic',   score: 0.09 },
+  { id:'S5',  label:'Angina Patterns',       domain:'Medical',     score: 0.79 },
+  { id:'S6',  label:'Grocery List',          domain:'Irrelevant',  score: 0.03 },
+  { id:'S7',  label:'Exertional Ischaemia',  domain:'Medical',     score: 0.84 },
+  { id:'S8',  label:'Nitrate Drug Info',     domain:'Medical',     score: 0.72 },
+  { id:'S9',  label:'Sports Medicine',       domain:'Off-topic',   score: 0.31 },
+  { id:'S10', label:'Risk Factor Chart',     domain:'Medical',     score: 0.68 },
+  { id:'S11', label:'Dental Records',        domain:'Off-topic',   score: 0.14 },
+  { id:'S12', label:'Chest X-Ray Protocol',  domain:'Medical',     score: 0.77 },
+];
+
+let THETA = 0.40;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CANVAS SETUP
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('main');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  W = rect.width;
+  H = 520;
+  canvas.width = W; canvas.height = H;
+  canvas.style.height = H + 'px';
+}
+resize(); window.addEventListener('resize', () => { resize(); });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LAYOUT CONSTANTS (computed from W, H)
+// ─────────────────────────────────────────────────────────────────────────────
+function layout() {
+  return {
+    // Signal queue column (left)
+    queueX:   W * 0.08,
+    queueTop: 80,
+    queueGap: 44,
+
+    // Thalamus gate (centre)
+    gateX:    W * 0.50,
+    gateY:    H * 0.50,
+    gateR:    44,
+
+    // Pass lane exits (right)
+    passX:    W * 0.87,
+    passY:    H * 0.28,
+
+    // Suppress exits (right)
+    suppX:    W * 0.87,
+    suppY:    H * 0.72,
+
+    // Cortex box
+    cortexX:  W * 0.88,
+    cortexY:  H * 0.18,
+    cortexW:  W * 0.10,
+    cortexH:  H * 0.20,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let state = {
+  queue: [],           // signals waiting in queue
+  active: null,        // signal currently traveling to gate
+  atGate: null,        // signal at gate being scored
+  traveling: null,     // signal leaving gate toward destination
+  passed: [],          // signals that passed → cortex
+  suppressed: [],      // signals that were blocked
+  animating: false,
+  stepQueue: [],
+  autoTimer: null,
+  speed: 1,
+  rafId: null,
+  gateFlash: 0,        // for gate glow effect
+  gateFlashColor: '#7b61ff',
+  particles: [],       // floating particles for ambience
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARTICLE SYSTEM (ambient)
+// ─────────────────────────────────────────────────────────────────────────────
+function initParticles() {
+  state.particles = [];
+  for (let i = 0; i < 30; i++) {
+    state.particles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: 1 + Math.random() * 1.5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -0.2 - Math.random() * 0.4,
+      alpha: 0.1 + Math.random() * 0.3,
+      col: ['#7b61ff','#00ff9d','#ff3366','#f0b429'][Math.floor(Math.random()*4)],
+      life: Math.random(),
+    });
+  }
+}
+initParticles();
+
+function tickParticles() {
+  state.particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy;
+    p.life += 0.005;
+    if (p.y < -10 || p.life > 1) {
+      p.x = Math.random() * W; p.y = H + 5;
+      p.life = 0;
+      p.vx = (Math.random()-0.5)*0.3;
+      p.vy = -0.2 - Math.random()*0.4;
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANIMATION OBJECTS: signals travel along bezier paths
+// ─────────────────────────────────────────────────────────────────────────────
+// Each traveling signal has: { signal, t (0→1), from{x,y}, to{x,y}, cp{x,y}, onDone }
+let travelingSignals = [];
+
+function startTravel(signal, fromX, fromY, toX, toY, cpX, cpY, onDone) {
+  travelingSignals.push({ signal, t: 0, fromX, fromY, toX, toY, cpX, cpY, onDone, done: false });
+}
+
+function bezier(t, p0, p1, p2) {
+  const mt = 1-t;
+  return mt*mt*p0 + 2*mt*t*p1 + t*t*p2;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP MACHINE
+// ─────────────────────────────────────────────────────────────────────────────
+function buildQueue() {
+  // deep clone signals
+  return SIGNALS_DEF.map(s => ({ ...s, passes: s.score >= THETA }));
+}
+
+let signalQueue = [];
+let signalIndex = 0;
+let busy = false;
+
+function processNext() {
+  if (busy) return;
+  if (signalIndex >= signalQueue.length) {
+    state.animating = false;
+    document.getElementById('runBtn').textContent = '▶ Run';
+    document.getElementById('runBtn').classList.remove('paused');
+    document.getElementById('stepBtn').disabled = false;
+    updateStats();
+    return;
+  }
+
+  busy = true;
+  const sig = signalQueue[signalIndex++];
+  const L = layout();
+
+  // 1. Appear at queue position (instant)
+  const qIdx = state.queue.length;
+  const qY = L.queueTop + qIdx * L.queueGap;
+  sig.qx = L.queueX; sig.qy = qY;
+  state.queue.push(sig);
+  updateStats();
+
+  const delay1 = 400 / state.speed;
+
+  // 2. Travel from queue to gate
+  setTimeout(() => {
+    state.queue = state.queue.filter(s => s.id !== sig.id);
+    updateStats();
+
+    // animate travel to gate
+    const cpX = (sig.qx + L.gateX) / 2;
+    const cpY = sig.qy - 40;
+    startTravel(sig, sig.qx, sig.qy, L.gateX - L.gateR - 10, L.gateY, cpX, cpY, () => {
+      // 3. At gate — score evaluation
+      sig.atGateT = 0;
+      state.atGate = sig;
+      triggerGateFlash(sig.passes ? '#00ff9d' : '#ff3366');
+      logSignal(sig);
+      updateStats();
+
+      const delay2 = 700 / state.speed;
+      setTimeout(() => {
+        state.atGate = null;
+
+        // 4. Leave gate toward destination
+        let toX, toY, cpX2, cpY2;
+        if (sig.passes) {
+          toX = L.passX - 10; toY = L.passY;
+          cpX2 = L.gateX + 80; cpY2 = L.gateY - 80;
+        } else {
+          toX = L.suppX - 10; toY = L.suppY;
+          cpX2 = L.gateX + 80; cpY2 = L.gateY + 80;
+        }
+
+        startTravel(sig, L.gateX + L.gateR + 10, L.gateY, toX, toY, cpX2, cpY2, () => {
+          if (sig.passes) {
+            state.passed.push(sig);
+          } else {
+            state.suppressed.push(sig);
+          }
+          updateStats();
+          busy = false;
+          // auto-advance if animating
+          if (state.animating) {
+            setTimeout(processNext, 300 / state.speed);
+          }
+        });
+      }, delay2);
+    });
+  }, delay1);
+}
+
+function triggerGateFlash(color) {
+  state.gateFlash = 1.5;
+  state.gateFlashColor = color;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+function signalColor(sig) {
+  return sig.passes ? '#00ff9d' : '#ff3366';
+}
+
+function drawSignalPill(x, y, sig, alpha = 1, scale = 1) {
+  const col = sig.score >= THETA ? '#00ff9d' : '#ff3366';
+  const w = 130 * scale, h = 32 * scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+
+  // Shadow glow
+  ctx.shadowColor = col;
+  ctx.shadowBlur = 12 * scale;
+
+  // Background
+  ctx.fillStyle = '#06080f';
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath();
+  ctx.roundRect(-w/2, -h/2, w, h, 6*scale);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Score bar fill (inner)
+  const barW = (w-8) * sig.score;
+  const barAlpha = 0.25;
+  ctx.globalAlpha = alpha * barAlpha;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.roundRect(-w/2+4, -h/2+4, barW, h-8, 3*scale);
+  ctx.fill();
+  ctx.globalAlpha = alpha;
+
+  // Label
+  ctx.font = `bold ${Math.round(10*scale)}px 'IBM Plex Mono'`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#cdd9f0';
+  ctx.shadowBlur = 0;
+  ctx.fillText(sig.label.length > 16 ? sig.label.slice(0,15)+'…' : sig.label, 0, -3*scale);
+
+  // Score
+  ctx.font = `${Math.round(9*scale)}px 'IBM Plex Mono'`;
+  ctx.fillStyle = col;
+  ctx.fillText(`score: ${sig.score.toFixed(2)}`, 0, 10*scale);
+
+  ctx.restore();
+}
+
+function drawGate(L, now) {
+  const { gateX: gx, gateY: gy, gateR: gr } = L;
+  ctx.save();
+
+  // Outer pulse rings
+  const t = (now % 2400) / 2400;
+  for (let i = 0; i < 3; i++) {
+    const phase = (t + i/3) % 1;
+    const pr = gr + 20 + phase * 50;
+    const pa = (1 - phase) * 0.3;
+    ctx.globalAlpha = pa;
+    ctx.strokeStyle = state.gateFlashColor || '#7b61ff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(gx, gy, pr, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Flash glow
+  if (state.gateFlash > 0) {
+    ctx.globalAlpha = Math.min(1, state.gateFlash) * 0.5;
+    ctx.shadowColor = state.gateFlashColor;
+    ctx.shadowBlur = 40;
+    ctx.fillStyle = state.gateFlashColor;
+    ctx.beginPath();
+    ctx.arc(gx, gy, gr + 14, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    state.gateFlash -= 0.04;
+    if (state.gateFlash < 0) state.gateFlash = 0;
+  }
+
+  // Gate body
+  const grad = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+  grad.addColorStop(0, '#1a1040');
+  grad.addColorStop(1, '#0b0820');
+  ctx.fillStyle = grad;
+  ctx.strokeStyle = '#7b61ff';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = '#7b61ff';
+  ctx.shadowBlur = 16;
+  ctx.beginPath();
+  ctx.arc(gx, gy, gr, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Hex symbol inside gate
+  ctx.strokeStyle = '#7b61ff';
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.5;
+  const hs = 16;
+  ctx.beginPath();
+  for (let i=0;i<6;i++) {
+    const a = Math.PI/180*(60*i-30);
+    const px = gx + hs*Math.cos(a), py = gy + hs*Math.sin(a);
+    i===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+  }
+  ctx.closePath(); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // θ label
+  ctx.font = "bold 13px 'IBM Plex Mono'";
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#7b61ff';
+  ctx.fillText('θ', gx, gy + 5);
+
+  // Theta value below
+  ctx.font = "10px 'IBM Plex Mono'";
+  ctx.fillStyle = '#4a6080';
+  ctx.fillText(THETA.toFixed(2), gx, gy + gr + 18);
+
+  // Gate label above
+  ctx.font = "bold 11px 'IBM Plex Mono'";
+  ctx.fillStyle = '#7b61ff';
+  ctx.letterSpacing = '2px';
+  ctx.fillText('THALAMUS', gx, gy - gr - 12);
+
+  ctx.restore();
+}
+
+function drawChannelLabels(L) {
+  ctx.save();
+
+  // Pass lane label
+  ctx.font = "bold 11px 'IBM Plex Mono'";
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#00ff9d80';
+  ctx.fillText('PASS GATE', L.gateX + (L.passX - L.gateX)*0.5, L.passY - 55);
+
+  // Suppress lane label
+  ctx.fillStyle = '#ff336680';
+  ctx.fillText('NO-GO GATE', L.gateX + (L.suppX - L.gateX)*0.5, L.suppY + 55);
+
+  ctx.restore();
+}
+
+function drawCortexBox(L) {
+  const bx = L.cortexX - L.cortexW/2;
+  const by = L.cortexY - L.cortexH/2;
+  const bw = L.cortexW;
+  const bh = L.cortexH;
+
+  ctx.save();
+  ctx.shadowColor = '#00ff9d';
+  ctx.shadowBlur = state.passed.length > 0 ? 16 : 4;
+
+  ctx.fillStyle = '#051510';
+  ctx.strokeStyle = state.passed.length > 0 ? '#00ff9d' : '#162040';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, bh, 6);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.font = "bold 9px 'IBM Plex Mono'";
+  ctx.textAlign = 'center';
+  ctx.fillStyle = state.passed.length > 0 ? '#00ff9d' : '#1a3030';
+  ctx.fillText('WORKING', bx + bw/2, by + 14);
+  ctx.fillText('MEMORY', bx + bw/2, by + 26);
+
+  // Show count
+  if (state.passed.length > 0) {
+    ctx.font = "bold 18px 'IBM Plex Mono'";
+    ctx.fillStyle = '#00ff9d';
+    ctx.fillText(state.passed.length, bx + bw/2, by + bh/2 + 10);
+    ctx.font = "8px 'IBM Plex Mono'";
+    ctx.fillStyle = '#00ff9d60';
+    ctx.fillText('signals', bx + bw/2, by + bh/2 + 24);
+  }
+
+  ctx.restore();
+}
+
+function drawSuppressBox(L) {
+  const bx = L.cortexX - L.cortexW/2;
+  const by = L.suppY + 30;
+  const bw = L.cortexW;
+  const bh = 60;
+
+  ctx.save();
+  ctx.shadowColor = '#ff3366';
+  ctx.shadowBlur = state.suppressed.length > 0 ? 12 : 2;
+  ctx.fillStyle = '#150508';
+  ctx.strokeStyle = state.suppressed.length > 0 ? '#ff3366' : '#1a0810';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, bh, 6);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.font = "bold 9px 'IBM Plex Mono'";
+  ctx.textAlign = 'center';
+  ctx.fillStyle = state.suppressed.length > 0 ? '#ff3366' : '#200a10';
+  ctx.fillText('SUPPRESSED', bx + bw/2, by + 14);
+
+  if (state.suppressed.length > 0) {
+    ctx.font = "bold 18px 'IBM Plex Mono'";
+    ctx.fillStyle = '#ff3366';
+    ctx.fillText(state.suppressed.length, bx + bw/2, by + 40);
+  }
+
+  ctx.restore();
+}
+
+function drawQueueList(L) {
+  // Queue column header
+  ctx.save();
+  ctx.font = "bold 10px 'IBM Plex Mono'";
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#4a6080';
+  ctx.fillText('SIGNAL QUEUE', L.queueX - 55, L.queueTop - 20);
+
+  // Draw queued signals
+  state.queue.forEach((sig, i) => {
+    const qy = L.queueTop + i * L.queueGap;
+    drawSignalPill(L.queueX, qy, sig, 0.7, 0.85);
+    // connector dot
+    ctx.fillStyle = '#162040';
+    ctx.beginPath();
+    ctx.arc(L.queueX + 70, qy, 3, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // If gate has a signal being evaluated
+  if (state.atGate) {
+    const sig = state.atGate;
+    const col = sig.score >= THETA ? '#00ff9d' : '#ff3366';
+    // Draw evaluation ring around gate
+    ctx.globalAlpha = 0.8;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    const L2 = layout();
+    ctx.beginPath();
+    ctx.arc(L2.gateX, L2.gateY, L2.gateR + 20, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // Score pop-up
+    ctx.font = "bold 14px 'IBM Plex Mono'";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = col;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 12;
+    const verdict = sig.score >= THETA ? '✓ PASS' : '✗ BLOCK';
+    ctx.fillText(verdict, L2.gateX, L2.gateY - L2.gateR - 32);
+    ctx.font = "11px 'IBM Plex Mono'";
+    ctx.fillText(`${sig.score.toFixed(2)} ${sig.score >= THETA ? '≥' : '<'} θ(${THETA.toFixed(2)})`, L2.gateX, L2.gateY - L2.gateR - 18);
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
+function drawPathLines(L) {
+  ctx.save();
+
+  // Incoming arrow line (left → gate)
+  const grad1 = ctx.createLinearGradient(L.queueX + 70, L.gateY, L.gateX - L.gateR, L.gateY);
+  grad1.addColorStop(0, '#162040');
+  grad1.addColorStop(1, '#7b61ff40');
+  ctx.strokeStyle = grad1;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(L.queueX + 70, L.gateY);
+  ctx.lineTo(L.gateX - L.gateR, L.gateY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Pass channel (gate → cortex)
+  const grad2 = ctx.createLinearGradient(L.gateX + L.gateR, L.gateY, L.passX, L.passY);
+  grad2.addColorStop(0, '#00ff9d30');
+  grad2.addColorStop(1, '#00ff9d80');
+  ctx.strokeStyle = grad2;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 3]);
+  ctx.beginPath();
+  ctx.moveTo(L.gateX + L.gateR, L.gateY);
+  ctx.quadraticCurveTo(L.gateX + 80, L.gateY - 80, L.passX, L.passY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Suppress channel (gate → void)
+  const grad3 = ctx.createLinearGradient(L.gateX + L.gateR, L.gateY, L.suppX, L.suppY);
+  grad3.addColorStop(0, '#ff336630');
+  grad3.addColorStop(1, '#ff336680');
+  ctx.strokeStyle = grad3;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 3]);
+  ctx.beginPath();
+  ctx.moveTo(L.gateX + L.gateR, L.gateY);
+  ctx.quadraticCurveTo(L.gateX + 80, L.gateY + 80, L.suppX, L.suppY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.restore();
+}
+
+function drawTravelingSignals() {
+  travelingSignals.forEach(ts => {
+    if (ts.done) return;
+    const x = bezier(ts.t, ts.fromX, ts.cpX, ts.toX);
+    const y = bezier(ts.t, ts.fromY, ts.cpY, ts.toY);
+    drawSignalPill(x, y, ts.signal, 1, 1);
+
+    // Trail
+    for (let i = 1; i <= 4; i++) {
+      const tt = Math.max(0, ts.t - i*0.04);
+      const tx = bezier(tt, ts.fromX, ts.cpX, ts.toX);
+      const ty = bezier(tt, ts.fromY, ts.cpY, ts.toY);
+      const col = ts.signal.score >= THETA ? '#00ff9d' : '#ff3366';
+      ctx.save();
+      ctx.globalAlpha = (0.15 - i*0.03);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 5 - i, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN RENDER LOOP
+// ─────────────────────────────────────────────────────────────────────────────
+let lastTime = 0;
+function renderLoop(now) {
+  const dt = now - lastTime; lastTime = now;
+  const L = layout();
+
+  // Update traveling signals
+  const speed = 0.012 * state.speed;
+  travelingSignals.forEach(ts => {
+    if (ts.done) return;
+    ts.t += speed;
+    if (ts.t >= 1) {
+      ts.t = 1; ts.done = true;
+      if (ts.onDone) setTimeout(ts.onDone, 0);
+    }
+  });
+  travelingSignals = travelingSignals.filter(ts => !ts.done || ts.t < 1.05);
+
+  tickParticles();
+
+  // Clear
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#06080f');
+  bg.addColorStop(1, '#0b1020');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid dots
+  ctx.fillStyle = '#162040';
+  for (let gx = 30; gx < W; gx += 40) {
+    for (let gy = 30; gy < H; gy += 40) {
+      ctx.beginPath();
+      ctx.arc(gx, gy, 1, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // Particles
+  state.particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = p.alpha * Math.sin(p.life * Math.PI);
+    ctx.fillStyle = p.col;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  drawPathLines(L);
+  drawChannelLabels(L);
+  drawGate(L, now);
+  drawCortexBox(L);
+  drawSuppressBox(L);
+  drawQueueList(L);
+  drawTravelingSignals();
+
+  // TSO indicator
+  ctx.save();
+  ctx.font = "bold 10px 'IBM Plex Mono'";
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#f0b42990';
+  ctx.fillText('TSO: patient "chest pain + stairs"', L.queueX - 55, 32);
+  ctx.fillStyle = '#4a6080';
+  ctx.fillText('→ task context: cardiology diagnosis', L.queueX - 55, 48);
+  ctx.restore();
+
+  state.rafId = requestAnimationFrame(renderLoop);
+}
+state.rafId = requestAnimationFrame(renderLoop);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const L = layout();
+  document.getElementById('stTheta').textContent = 'θ=' + THETA.toFixed(2);
+  document.getElementById('stIn').textContent    = signalIndex;
+  document.getElementById('stPass').textContent  = state.passed.length;
+  document.getElementById('stBlock').textContent = state.suppressed.length;
+  const q = signalQueue.length - signalIndex + state.queue.length;
+  document.getElementById('stQueue').textContent = Math.max(0, signalQueue.length - signalIndex);
+}
+
+function logSignal(sig) {
+  const log = document.getElementById('sigLog');
+  const entry = document.createElement('div');
+  entry.className = 'sig-entry';
+  const passes = sig.score >= THETA;
+  entry.innerHTML = `
+    <span class="sig-name">${passes ? '✓' : '✗'} ${sig.label}</span>
+    <span class="sig-score ${passes ? 'pass' : 'block'}">${sig.score.toFixed(2)} ${passes ? '≥' : '<'} ${THETA.toFixed(2)}</span>
+  `;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function resetAll() {
+  if (state.autoTimer) clearTimeout(state.autoTimer);
+  state.animating = false;
+  state.queue = [];
+  state.atGate = null;
+  state.passed = [];
+  state.suppressed = [];
+  state.gateFlash = 0;
+  travelingSignals = [];
+  signalQueue = [];
+  signalIndex = 0;
+  busy = false;
+  document.getElementById('sigLog').innerHTML = '';
+  document.getElementById('runBtn').textContent = '▶ Run';
+  document.getElementById('runBtn').classList.remove('paused');
+  document.getElementById('stepBtn').disabled = false;
+  updateStats();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENT HANDLERS
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', function() {
+  if (state.animating) {
+    state.animating = false;
+    this.textContent = '▶ Resume';
+    this.classList.remove('paused');
+    return;
+  }
+  if (signalQueue.length === 0) {
+    resetAll();
+    signalQueue = buildQueue();
+    updateStats();
+  }
+  state.animating = true;
+  this.textContent = '⏸ Pause';
+  this.classList.add('paused');
+  processNext();
+});
+
+document.getElementById('stepBtn').addEventListener('click', function() {
+  if (busy) return;
+  if (signalQueue.length === 0) {
+    resetAll();
+    signalQueue = buildQueue();
+    updateStats();
+  }
+  state.animating = false;
+  document.getElementById('runBtn').textContent = '▶ Resume';
+  document.getElementById('runBtn').classList.remove('paused');
+  processNext();
+});
+
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+document.getElementById('speedSlider').addEventListener('input', function() {
+  state.speed = parseFloat(this.value);
+});
+
+document.getElementById('thetaSlider').addEventListener('input', function() {
+  THETA = parseFloat(this.value);
+  document.getElementById('thetaVal').textContent = THETA.toFixed(2);
+  document.getElementById('fTheta').textContent   = THETA.toFixed(2);
+  document.getElementById('stTheta').textContent  = 'θ=' + THETA.toFixed(2);
+  // Rebuild signal queue with new theta if not yet started
+  if (signalQueue.length > 0) {
+    signalQueue = signalQueue.map(s => ({ ...s, passes: s.score >= THETA }));
+  }
+});
+
+updateStats();
+</script>
+
+</body>
+</html>
