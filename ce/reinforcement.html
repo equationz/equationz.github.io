@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Engine — Reinforcement Loop for Outcome Feedback</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.6; }
+
+.hero { background: linear-gradient(135deg, #1a1f2e 0%, #0f1117 100%); border-bottom: 1px solid #2d3748; padding: 40px 32px 32px; text-align: center; }
+.hero h1 { font-size: 1.9rem; font-weight: 700; color: #f7fafc; margin-bottom: 8px; }
+.hero .subtitle { color: #718096; font-size: 0.95rem; max-width: 600px; margin: 0 auto; }
+.brain-badge { display: inline-block; background: #2d3748; border: 1px solid #4a5568; border-radius: 20px; padding: 4px 14px; font-size: 0.78rem; color: #a0aec0; margin-bottom: 16px; }
+
+.container { max-width: 980px; margin: 0 auto; padding: 32px 24px; }
+
+/* Section headers */
+.section-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #718096; margin-bottom: 8px; }
+.section-title { font-size: 1.25rem; font-weight: 700; color: #f7fafc; margin-bottom: 6px; }
+.section-desc { color: #a0aec0; font-size: 0.9rem; margin-bottom: 28px; }
+
+/* Scenario box */
+.scenario { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px; padding: 20px 24px; margin-bottom: 32px; }
+.scenario-tag { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #667eea; margin-bottom: 10px; }
+.scenario p { color: #cbd5e0; font-size: 0.93rem; }
+.scenario strong { color: #f7fafc; }
+
+/* Flow diagram */
+.flow { display: flex; flex-direction: column; gap: 0; margin-bottom: 40px; }
+
+.flow-phase { display: grid; grid-template-columns: 180px 1fr; gap: 0; position: relative; }
+.flow-phase + .flow-phase { margin-top: 0; }
+
+.phase-label-col { display: flex; flex-direction: column; align-items: center; padding-top: 18px; }
+.phase-dot { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem; flex-shrink: 0; z-index: 1; }
+.phase-line { width: 2px; flex: 1; min-height: 20px; }
+
+.phase-card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px; padding: 18px 20px; margin: 8px 0 8px 0; margin-left: 16px; flex: 1; }
+.phase-card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; }
+.phase-card p { font-size: 0.87rem; color: #a0aec0; margin-bottom: 10px; }
+
+/* Color schemes per phase */
+.p1 .phase-dot { background: #2b6cb0; color: #bee3f8; }
+.p1 .phase-line { background: linear-gradient(to bottom, #2b6cb0, #553c9a); }
+.p1 .phase-card { border-color: #2b6cb040; }
+.p1 .phase-card h3 { color: #63b3ed; }
+
+.p2 .phase-dot { background: #553c9a; color: #e9d8fd; }
+.p2 .phase-line { background: linear-gradient(to bottom, #553c9a, #285e61); }
+.p2 .phase-card { border-color: #553c9a40; }
+.p2 .phase-card h3 { color: #b794f4; }
+
+.p3 .phase-dot { background: #285e61; color: #b2f5ea; }
+.p3 .phase-line { background: linear-gradient(to bottom, #285e61, #c05621); }
+.p3 .phase-card { border-color: #285e6140; }
+.p3 .phase-card h3 { color: #4fd1c5; }
+
+.p4 .phase-dot { background: #c05621; color: #feebc8; }
+.p4 .phase-line { background: linear-gradient(to bottom, #c05621, #276749); }
+.p4 .phase-card { border-color: #c0562140; }
+.p4 .phase-card h3 { color: #f6ad55; }
+
+.p5 .phase-dot { background: #276749; color: #c6f6d5; }
+.p5 .phase-line { background: linear-gradient(to bottom, #276749, #276749); }
+.p5 .phase-card { border-color: #27674940; }
+.p5 .phase-card h3 { color: #68d391; }
+
+/* Code/data blocks inside cards */
+.data-block { background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 12px 14px; font-family: ‘Courier New’, monospace; font-size: 0.8rem; color: #e2e8f0; margin-top: 10px; }
+.data-block .key { color: #667eea; }
+.data-block .val { color: #68d391; }
+.data-block .str { color: #f6ad55; }
+.data-block .comment { color: #4a5568; }
+
+/* Weight update visual */
+.weight-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.weight-item { background: #0f1117; border-radius: 8px; padding: 10px 12px; border: 1px solid #2d3748; }
+.weight-item .wlabel { font-size: 0.72rem; color: #718096; margin-bottom: 4px; }
+.weight-item .wchange { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-family: monospace; }
+.wbefore { color: #a0aec0; }
+.warrow { color: #4a5568; }
+.wafter { font-weight: 700; }
+.wdelta { font-size: 0.72rem; border-radius: 4px; padding: 1px 6px; font-weight: 700; }
+.pos { color: #68d391; }
+.neg { color: #fc8181; }
+.delta-pos { background: #1c4532; color: #68d391; }
+.delta-neg { background: #3d1515; color: #fc8181; }
+
+/* Timescale table */
+.ts-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.83rem; }
+.ts-table th { background: #0f1117; color: #718096; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #2d3748; }
+.ts-table td { padding: 9px 12px; border-bottom: 1px solid #1a1f2e; color: #a0aec0; vertical-align: top; }
+.ts-table td:first-child { color: #f7fafc; font-weight: 600; white-space: nowrap; }
+.ts-table tr:last-child td { border-bottom: none; }
+
+/* Outcome banner */
+.outcome-banner { border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 14px; }
+.ob-success { background: #1c4532; border: 1px solid #276749; }
+.ob-failure { background: #3d1515; border: 1px solid #742a2a; }
+.ob-partial { background: #2d2010; border: 1px solid #744210; }
+.ob-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: 2px; }
+.ob-body { flex: 1; }
+.ob-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+.ob-success .ob-label { color: #68d391; }
+.ob-failure .ob-label { color: #fc8181; }
+.ob-partial .ob-label { color: #f6ad55; }
+.ob-text { font-size: 0.85rem; color: #e2e8f0; }
+
+/* API payload */
+.api-pill { display: inline-block; background: #2d3748; border-radius: 4px; padding: 2px 8px; font-family: monospace; font-size: 0.78rem; color: #63b3ed; margin-right: 4px; }
+
+/* Insight box */
+.insight { background: linear-gradient(135deg, #1a1f2e, #0f1117); border: 1px solid #667eea40; border-left: 3px solid #667eea; border-radius: 0 10px 10px 0; padding: 16px 20px; margin-top: 32px; }
+.insight .insight-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #667eea; margin-bottom: 8px; }
+.insight p { font-size: 0.9rem; color: #cbd5e0; }
+
+/* KG edge diagram */
+.kg-diagram { background: #0f1117; border: 1px solid #2d3748; border-radius: 10px; padding: 16px; margin-top: 10px; font-family: monospace; font-size: 0.8rem; line-height: 1.9; }
+.kg-node { color: #63b3ed; font-weight: 700; }
+.kg-edge { color: #4a5568; }
+.kg-weight-old { color: #718096; text-decoration: line-through; }
+.kg-weight-new { color: #68d391; font-weight: 700; }
+.kg-weight-decay { color: #fc8181; font-weight: 700; }
+.kg-arrow { color: #553c9a; }
+
+.divider { border: none; border-top: 1px solid #2d3748; margin: 40px 0; }
+
+@media (max-width: 640px) {
+.flow-phase { grid-template-columns: 60px 1fr; }
+.weight-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+</head>
+<body>
+
+<div class="hero">
+  <div class="brain-badge">🧠 Basal Ganglia Analog · Dopamine Loop</div>
+  <h1>Reinforcement Loop for Outcome Feedback</h1>
+  <p class="subtitle">How the Context Engine learns from agent outcomes to improve future context delivery — illustrated with a concrete example</p>
+</div>
+
+<div class="container">
+
+  <!-- SCENARIO -->
+
+  <div class="section-label">The Setup</div>
+  <div class="scenario">
+    <div class="scenario-tag">📌 Example Scenario</div>
+    <p>An AI support agent is investigating a <strong>payment double-charge bug</strong>. It calls the Context Engine (<span class="api-pill">POST /v1/context</span>) with a Task Signal Object specifying <strong>task_type: "bug_investigation"</strong> and entities <strong>DuplicateTransactionBug</strong> and <strong>PaymentService</strong>.</p>
+    <br>
+    <p>The engine assembles an Assembled Context Payload (ACP) via KG traversal, surfacing chunks about <strong>ConcurrencyBug</strong>, <strong>PaymentService.processPayment()</strong>, and <strong>LockTimeout</strong> — but also includes <strong>BillingAuditLogs</strong>, which turns out to be irrelevant. The agent resolves the bug successfully but flags the audit-log context as unhelpful.</p>
+  </div>
+
+  <!-- FLOW -->
+
+  <div class="section-label">Step-by-step walkthrough</div>
+  <div class="section-title">The 8-Stage Reinforcement Loop</div>
+  <div class="section-desc">From agent action → outcome signal → weight updates → improved future retrieval</div>
+
+  <div class="flow">
+
+```
+<!-- Phase 1 -->
+<div class="flow-phase p1">
+  <div class="phase-label-col">
+    <div class="phase-dot">1</div>
+    <div class="phase-line"></div>
+  </div>
+  <div class="phase-card">
+    <h3>Agent Calls Context Engine</h3>
+    <p>The support agent emits a Task Signal Object (TSO). The engine records a <code style="color:#63b3ed">request_id</code> for this retrieval session.</p>
+    <div class="data-block">
+```
+
+<span class="comment">// POST /v1/context</span>
+{
+<span class="key">“task_type”</span>: <span class="str">“bug_investigation”</span>,
+<span class="key">“entities”</span>: [
+{ <span class="key">“name”</span>: <span class="str">“DuplicateTransactionBug”</span>, <span class="key">“ontology_class”</span>: <span class="str">“BugReport”</span> },
+{ <span class="key">“name”</span>: <span class="str">“PaymentService”</span>, <span class="key">“ontology_class”</span>: <span class="str">“Service”</span> }
+],
+<span class="key">“token_budget”</span>: <span class="val">2048</span>,
+<span class="key">“kg_depth”</span>: <span class="val">3</span>,
+<span class="key">“request_id”</span>: <span class="str">“req_abc123”</span>
+}
+</div>
+</div>
+</div>
+
+```
+<!-- Phase 2 -->
+<div class="flow-phase p2">
+  <div class="phase-label-col">
+    <div class="phase-dot">2</div>
+    <div class="phase-line"></div>
+  </div>
+  <div class="phase-card">
+    <h3>KG Traversal &amp; Context Assembly</h3>
+    <p>The engine performs spreading activation from anchor nodes, scores candidates, and assembles the ACP. Each used chunk and KG edge path is recorded against <code style="color:#63b3ed">req_abc123</code>.</p>
+    <div class="kg-diagram">
+```
+
+<span class="kg-node">DuplicateTransactionBug</span> (seed, A₀=0.91)
+<span class="kg-arrow">└─[is-a, w=0.95]──►</span> <span class="kg-node">ConcurrencyBug</span>   A=0.778 ✅ included
+<span class="kg-arrow">└─[affects, w=0.88]──►</span> <span class="kg-node">PaymentService</span>   A=0.801 ✅ included
+<span class="kg-arrow">└─[calls, w=0.80]──►</span> <span class="kg-node">processPayment()</span> A=0.641 ✅ included
+<span class="kg-arrow">└─[logs-to, w=0.55]──►</span> <span class="kg-node">BillingAuditLogs</span> A=0.441 ✅ included
+<span class="kg-arrow">└─[related-to, w=0.40]──►</span> <span class="kg-node">ThreadingDocs</span>  A=0.280 ❌ suppressed
+</div>
+</div>
+</div>
+
+```
+<!-- Phase 3 -->
+<div class="flow-phase p3">
+  <div class="phase-label-col">
+    <div class="phase-dot">3</div>
+    <div class="phase-line"></div>
+  </div>
+  <div class="phase-card">
+    <h3>ACP Delivered to Agent</h3>
+    <p>The engine returns the Assembled Context Payload. It also stores the <strong>subgraph signature</strong> — the set of KG nodes and edges activated — for later pattern learning.</p>
+    <div class="data-block">
+```
+
+<span class="comment">// Response from /v1/context</span>
+{
+<span class="key">“request_id”</span>: <span class="str">“req_abc123”</span>,
+<span class="key">“chunks_used”</span>: [<span class="str">“chunk_042”</span>, <span class="str">“chunk_107”</span>, <span class="str">“chunk_211”</span>, <span class="str">“chunk_318”</span>],
+<span class="key">“kg_nodes_activated”</span>: [<span class="str">“ConcurrencyBug”</span>, <span class="str">“PaymentService”</span>,
+<span class="str">“processPayment()”</span>, <span class="str">“BillingAuditLogs”</span>],
+<span class="key">“path”</span>: <span class="str">“cold”</span>,
+<span class="key">“tokens_used”</span>: <span class="val">1843</span>
+}
+</div>
+</div>
+</div>
+
+```
+<!-- Phase 4 -->
+<div class="flow-phase p4">
+  <div class="phase-label-col">
+    <div class="phase-dot">4</div>
+    <div class="phase-line"></div>
+  </div>
+  <div class="phase-card">
+    <h3>Agent Resolves the Task</h3>
+    <p>The agent successfully identifies and patches the concurrency bug in <code style="color:#63b3ed">processPayment()</code>. However, it determines that <strong>BillingAuditLogs</strong> consumed tokens without contributing to the resolution.</p>
+    <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+      <div class="outcome-banner ob-success">
+        <div class="ob-icon">✅</div>
+        <div class="ob-body">
+          <div class="ob-label">Useful context</div>
+          <div class="ob-text">ConcurrencyBug, PaymentService, processPayment() — all directly contributed to the fix</div>
+        </div>
+      </div>
+      <div class="outcome-banner ob-failure">
+        <div class="ob-icon">❌</div>
+        <div class="ob-body">
+          <div class="ob-label">Irrelevant context</div>
+          <div class="ob-text">BillingAuditLogs — consumed 240 tokens, provided no value for bug investigation task</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 5 -->
+<div class="flow-phase p5">
+  <div class="phase-label-col">
+    <div class="phase-dot">5</div>
+    <div class="phase-line"></div>
+  </div>
+  <div class="phase-card">
+    <h3>Agent Submits Outcome Feedback</h3>
+    <p>The agent posts a feedback signal to <span class="api-pill">POST /v1/feedback</span>, referencing <code style="color:#63b3ed">req_abc123</code> and providing per-edge KG reinforcement signals.</p>
+    <div class="data-block">
+```
+
+<span class="comment">// POST /v1/feedback</span>
+{
+<span class="key">“request_id”</span>: <span class="str">“req_abc123”</span>,
+<span class="key">“outcome”</span>: <span class="str">“success”</span>,
+<span class="key">“score”</span>: <span class="val">0.72</span>,  <span class="comment">// penalised for irrelevant BillingAuditLogs</span>
+<span class="key">“kg_path_feedback”</span>: [
+{ <span class="key">“edge_id”</span>: <span class="str">“ConcurrencyBug→processPayment”</span>,  <span class="key">“signal”span>: <span class="val">+1</span> },
+{ <span class="key">“edge_id”</span>: <span class="str">“PaymentService→BillingAuditLogs”</span>, <span class="key">“signal”</span>: <span class="val">-1</span> }
+]
+}
+</div>
+</div>
+</div>
+
+  </div><!-- end flow -->
+
+  <hr class="divider">
+
+  <!-- WEIGHT UPDATES -->
+
+  <div class="section-label">Layer 6 · Feedback Integrator (Dopamine Loop Analog)</div>
+  <div class="section-title">Back-propagation of Reinforcement Adjustments</div>
+  <div class="section-desc">The engine applies bounded weight deltas (capped at ±0.05 per event) to prevent runaway reinforcement</div>
+
+  <div class="weight-grid">
+    <div class="weight-item">
+      <div class="wlabel">📦 Chunk Weight — chunk_107 (ConcurrencyBug)</div>
+      <div class="wchange">
+        <span class="wbefore">0.778</span>
+        <span class="warrow">→</span>
+        <span class="wafter pos">0.823</span>
+        <span class="wdelta delta-pos">+0.045</span>
+      </div>
+    </div>
+    <div class="weight-item">
+      <div class="wlabel">📦 Chunk Weight — chunk_318 (BillingAuditLogs)</div>
+      <div class="wchange">
+        <span class="wbefore">0.441</span>
+        <span class="warrow">→</span>
+        <span class="wafter neg">0.396</span>
+        <span class="wdelta delta-neg">−0.045</span>
+      </div>
+    </div>
+    <div class="weight-item">
+      <div class="wlabel">🔗 KG Edge Weight — ConcurrencyBug → processPayment()</div>
+      <div class="wchange">
+        <span class="wbefore">0.80</span>
+        <span class="warrow">→</span>
+        <span class="wafter pos">0.845</span>
+        <span class="wdelta delta-pos">+0.045</span>
+      </div>
+    </div>
+    <div class="weight-item">
+      <div class="wlabel">🔗 KG Edge Weight — PaymentService → BillingAuditLogs</div>
+      <div class="wchange">
+        <span class="wbefore">0.55</span>
+        <span class="warrow">→</span>
+        <span class="wafter neg">0.505</span>
+        <span class="wdelta delta-neg">−0.045</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:#0f1117; border:1px solid #2d3748; border-radius:10px; padding:14px 18px; margin-top:16px; font-size:0.85rem; color:#a0aec0;">
+    <span style="color:#f7fafc; font-weight:600;">⚠️ Runaway reinforcement guard (FR-9):</span> All deltas are bounded to <span style="color:#f6ad55; font-family:monospace;">±0.05</span> per feedback event. The raw signal of <code style="color:#63b3ed">score=0.72</code> is scaled: <span style="font-family:monospace; color:#63b3ed;">Δ = 0.05 × |signal| × (outcome_weight)</span>. This prevents a single noisy signal from destabilising the graph.
+  </div>
+
+  <hr class="divider">
+
+  <!-- TIMESCALES -->
+
+  <div class="section-label">Learning &amp; Adaptation Model</div>
+  <div class="section-title">Three-Timescale Reinforcement</div>
+  <div class="section-desc">The reinforcement loop operates across three nested timescales — mirroring short-term LTP and long-term memory consolidation in the brain</div>
+
+  <table class="ts-table">
+    <thead>
+      <tr>
+        <th>Timescale</th>
+        <th>What Gets Updated</th>
+        <th>Effect on Our Example</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>⚡ Per-turn (online)</td>
+        <td>Chunk weights + KG edge weights</td>
+        <td>BillingAuditLogs edge weight drops immediately from 0.55 → 0.505; ConcurrencyBug edge rises to 0.845. Next bug_investigation call already benefits.</td>
+      </tr>
+      <tr>
+        <td>🌙 Daily (batch)</td>
+        <td>Pattern consolidation, chunk merging, KG subgraph signature caching</td>
+        <td>After many successful bug_investigation tasks, the ConcurrencyBug→processPayment path gets cached as a hot-path pattern. Next call hits the Pattern Store directly (P95 &lt; 50ms) — no KG traversal needed.</td>
+      </tr>
+      <tr>
+        <td>📅 Weekly (offline)</td>
+        <td>Global re-ranking, ontology edge weight reset, KG coverage audit</td>
+        <td>If BillingAuditLogs consistently receives negative signals, its edge is pruned from the bug_investigation subgraph during the weekly KG coverage audit. Ontology coverage gaps are flagged for corpus ingestion.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr class="divider">
+
+  <!-- BEFORE / AFTER -->
+
+  <div class="section-label">Outcome</div>
+  <div class="section-title">Before vs. After the Feedback Loop</div>
+  <div class="section-desc">The next time an agent investigates a concurrency-related payment bug</div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:32px;">
+    <div style="background:#1a1f2e; border:1px solid #742a2a; border-radius:10px; padding:16px;">
+      <div style="font-size:0.72rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#fc8181; margin-bottom:10px;">Before feedback</div>
+      <div class="kg-diagram" style="font-size:0.76rem;">
+<span class="kg-node">PaymentService</span> activates:
+  <span class="kg-arrow">→</span> processPayment()   <span style="color:#68d391;">✅</span>
+  <span class="kg-arrow">→</span> BillingAuditLogs   <span style="color:#a0aec0;">w=0.55 (included)</span>
+      </div>
+    </div>
+    <div style="background:#1a1f2e; border:1px solid #276749; border-radius:10px; padding:16px;">
+      <div style="font-size:0.72rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#68d391; margin-bottom:10px;">After feedback</div>
+      <div class="kg-diagram" style="font-size:0.76rem;">
+<span class="kg-node">PaymentService</span> activates:
+  <span class="kg-arrow">→</span> processPayment()   <span style="color:#68d391;">✅ w=0.845 (↑)</span>
+  <span class="kg-arrow">→</span> BillingAuditLogs   <span style="color:#fc8181;">w=0.505 → suppressed</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLOSING INSIGHT -->
+
+  <div class="insight">
+    <div class="insight-label">🔑 Core Insight</div>
+    <p>The reinforcement loop is the Context Engine's equivalent of the brain's <strong>dopaminergic reward system</strong> (Layer 6 is explicitly called the "Dopamine Loop Analog" in the PRD). Just as the basal ganglia strengthens neural pathways that led to rewarding outcomes and weakens those that didn't, the Feedback Integrator back-propagates outcome signals to adjust <em>both</em> chunk relevance weights and KG edge weights. Over time, this means the engine autonomously learns which relational paths are genuinely useful for each task type — without any manual re-tuning of the graph.</p>
+  </div>
+
+</div><!-- end container -->
+</body>
+</html>
