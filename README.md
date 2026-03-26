@@ -13,7 +13,7 @@ equationz.in/
 │   └── img/            # Images
 │       ├── EquationzLogo.png
 │       └── hero-image.svg
-└── README.md           # This file
+└── README.md           # This file is readme
 ```
 
 ## Features
